@@ -5,31 +5,90 @@ import type {
 } from "../types";
 
 /*
- * DRE2learn Progressive Level Test
+ * =========================================================
+ * DRE2learn Progressive / Adaptive Level Test
+ * =========================================================
  *
- * Maximum: 50 questions
+ * Maximum questions: 50
+ *
  * Skills:
  * - Reading
  * - Listening
  * - Writing
  * - Grammar & Vocabulary
  *
- * Difficulty:
+ * CEFR:
  * A1 → A2 → B1 → B2 → C1 → C2
  *
- * The test does NOT simply calculate:
- * "number correct = level".
+ * IMPORTANT:
+ * This file contains both:
  *
- * Instead, performance at each CEFR level
- * is evaluated progressively.
+ * 1. The question bank
+ * 2. The progressive/adaptive scoring engine
+ *
+ * Writing questions are NOT automatically scored by
+ * isAnswerCorrect(). They use the writing rubric below.
  */
+
+/* =========================================================
+ * CONSTANTS
+ * ========================================================= */
 
 export const MAX_LEVEL_TEST_QUESTIONS = 50;
 
+export const MIN_LEVEL_TEST_QUESTIONS = 12;
+
+export const EARLY_FINISH_MIN_QUESTIONS = 20;
+
+export const levelOrder: Level[] = [
+  "A1",
+  "A2",
+  "B1",
+  "B2",
+  "C1",
+  "C2",
+];
+
+export const levelDescriptions: Record<Level, string> = {
+  A1: "Beginner",
+  A2: "Elementary",
+  B1: "Intermediate",
+  B2: "Upper-Intermediate",
+  C1: "Advanced",
+  C2: "Proficient",
+};
+
+/*
+ * Minimum objective performance needed to demonstrate
+ * a CEFR level with reasonable confidence.
+ */
+export const LEVEL_MASTERY_THRESHOLD = 0.6;
+
+/*
+ * Strong performance means the learner is ready to
+ * move toward the next CEFR level.
+ */
+export const LEVEL_ADVANCE_THRESHOLD = 0.7;
+
+/*
+ * Weak performance suggests that the current level
+ * may be the learner's ceiling.
+ */
+export const LEVEL_STOP_THRESHOLD = 0.4;
+
+/*
+ * Number of recent answers used by the adaptive engine.
+ */
+export const ADAPTIVE_WINDOW_SIZE = 4;
+
+/* =========================================================
+ * QUESTION BANK
+ * ========================================================= */
+
 export const levelTestQuestions: LevelTestQuestion[] = [
-  // =====================================================
-  // A1 — FOUNDATION
-  // =====================================================
+  /* =======================================================
+   * A1 — FOUNDATION
+   * ======================================================= */
 
   {
     id: "a1-g-01",
@@ -145,9 +204,9 @@ export const levelTestQuestions: LevelTestQuestion[] = [
     points: 2,
   },
 
-  // =====================================================
-  // A2 — ELEMENTARY
-  // =====================================================
+  /* =======================================================
+   * A2 — ELEMENTARY
+   * ======================================================= */
 
   {
     id: "a2-g-01",
@@ -284,9 +343,9 @@ export const levelTestQuestions: LevelTestQuestion[] = [
     points: 2,
   },
 
-  // =====================================================
-  // B1 — INTERMEDIATE
-  // =====================================================
+  /* =======================================================
+   * B1 — INTERMEDIATE
+   * ======================================================= */
 
   {
     id: "b1-g-01",
@@ -427,9 +486,9 @@ export const levelTestQuestions: LevelTestQuestion[] = [
     points: 3,
   },
 
-  // =====================================================
-  // B2 — UPPER INTERMEDIATE
-  // =====================================================
+  /* =======================================================
+   * B2 — UPPER INTERMEDIATE
+   * ======================================================= */
 
   {
     id: "b2-g-01",
@@ -571,9 +630,9 @@ export const levelTestQuestions: LevelTestQuestion[] = [
     points: 3,
   },
 
-  // =====================================================
-  // C1 — ADVANCED
-  // =====================================================
+  /* =======================================================
+   * C1 — ADVANCED
+   * ======================================================= */
 
   {
     id: "c1-g-01",
@@ -716,9 +775,9 @@ export const levelTestQuestions: LevelTestQuestion[] = [
     points: 4,
   },
 
-  // =====================================================
-  // C2 — PROFICIENT
-  // =====================================================
+  /* =======================================================
+   * C2 — PROFICIENT
+   * ======================================================= */
 
   {
     id: "c2-g-01",
@@ -860,24 +919,106 @@ export const levelTestQuestions: LevelTestQuestion[] = [
       "Write 200–250 words discussing whether simplifying complex problems helps or harms decision-making. Present a nuanced argument and address an opposing perspective.",
     points: 5,
   },
+
+  /*
+   * Additional C2 questions.
+   *
+   * These bring the complete question bank to exactly 50.
+   */
+
+  {
+    id: "c2-g-04",
+    level: "C2",
+    skill: "grammar",
+    type: "multiple-choice",
+    question:
+      "Rarely ___ such a comprehensive analysis of the issue.",
+    options: [
+      "we encounter",
+      "do we encounter",
+      "we do encounter",
+      "encounter we",
+    ],
+    correctAnswer:
+      "do we encounter",
+    points: 1,
+  },
+
+  {
+    id: "c2-r-03",
+    level: "C2",
+    skill: "reading",
+    type: "multiple-choice",
+    passage:
+      "Institutional reforms may appear successful when judged by formal indicators, yet their practical consequences can remain uneven. A policy may therefore satisfy its stated objectives while simultaneously producing unintended effects that are less visible in conventional measures of success.",
+    question:
+      "What limitation of conventional evaluation does the passage identify?",
+    options: [
+      "Formal indicators always exaggerate failure.",
+      "Policies never achieve their stated objectives.",
+      "Conventional measures may overlook unintended consequences.",
+      "Institutional reforms cannot be evaluated.",
+    ],
+    correctAnswer:
+      "Conventional measures may overlook unintended consequences.",
+    points: 1,
+  },
 ];
 
-/*
- * CEFR order
- */
-
-export const levelOrder: Level[] = [
-  "A1",
-  "A2",
-  "B1",
-  "B2",
-  "C1",
-  "C2",
-];
+/* =========================================================
+ * BANK VALIDATION
+ * ========================================================= */
 
 /*
- * Get questions belonging to a specific CEFR level.
+ * The final bank must contain exactly 50 questions.
  */
+export const LEVEL_TEST_QUESTION_COUNT =
+  levelTestQuestions.length;
+
+/*
+ * Runtime-safe validation helper.
+ */
+export function validateLevelTestBank(): {
+  valid: boolean;
+  count: number;
+  expected: number;
+  duplicateIds: string[];
+  missingLevels: Level[];
+} {
+  const ids = new Set<string>();
+  const duplicateIds: string[] = [];
+
+  for (const question of levelTestQuestions) {
+    if (ids.has(question.id)) {
+      duplicateIds.push(question.id);
+    }
+
+    ids.add(question.id);
+  }
+
+  const missingLevels = levelOrder.filter(
+    (level) =>
+      !levelTestQuestions.some(
+        (question) => question.level === level,
+      ),
+  );
+
+  return {
+    valid:
+      levelTestQuestions.length ===
+        MAX_LEVEL_TEST_QUESTIONS &&
+      duplicateIds.length === 0 &&
+      missingLevels.length === 0,
+    count: levelTestQuestions.length,
+    expected: MAX_LEVEL_TEST_QUESTIONS,
+    duplicateIds,
+    missingLevels,
+  };
+}
+
+/* =========================================================
+ * BASIC QUESTION HELPERS
+ * ========================================================= */
 
 export function getQuestionsByLevel(
   level: Level,
@@ -887,10 +1028,6 @@ export function getQuestionsByLevel(
   );
 }
 
-/*
- * Get questions belonging to a specific skill.
- */
-
 export function getQuestionsBySkill(
   skill: LevelTestSkill,
 ): LevelTestQuestion[] {
@@ -898,10 +1035,6 @@ export function getQuestionsBySkill(
     (question) => question.skill === skill,
   );
 }
-
-/*
- * Get questions available up to a certain level.
- */
 
 export function getQuestionsUpToLevel(
   level: Level,
@@ -922,20 +1055,48 @@ export function getQuestionsUpToLevel(
   );
 }
 
-/*
- * Basic MCQ scoring.
- *
- * Writing is intentionally NOT automatically scored here.
- * Writing will have its own rubric/scoring system.
- */
+export function getLevelIndex(
+  level: Level,
+): number {
+  return levelOrder.indexOf(level);
+}
+
+export function getNextLevel(
+  level: Level,
+): Level | null {
+  const index = getLevelIndex(level);
+
+  if (
+    index === -1 ||
+    index >= levelOrder.length - 1
+  ) {
+    return null;
+  }
+
+  return levelOrder[index + 1];
+}
+
+export function getPreviousLevel(
+  level: Level,
+): Level | null {
+  const index = getLevelIndex(level);
+
+  if (index <= 0) {
+    return null;
+  }
+
+  return levelOrder[index - 1];
+}
+
+/* =========================================================
+ * ANSWER CHECKING
+ * ========================================================= */
 
 export function isAnswerCorrect(
   question: LevelTestQuestion,
   answer: string,
 ): boolean {
-  if (
-    question.type !== "multiple-choice"
-  ) {
+  if (question.type !== "multiple-choice") {
     return false;
   }
 
@@ -951,45 +1112,9 @@ export function isAnswerCorrect(
   );
 }
 
-/*
- * Calculate the strongest level demonstrated.
- *
- * This is an initial calculation layer.
- * The final adaptive engine will use:
- *
- * - consecutive correct answers
- * - consecutive incorrect answers
- * - skill performance
- * - writing score
- * - confidence
- */
-
-export function calculateProgressiveLevel(
-  levelScores: Record<Level, number>,
-): Level {
-  let strongestLevel: Level = "A1";
-
-  for (const level of levelOrder) {
-    const score = levelScores[level] ?? 0;
-
-    /*
-     * A level is considered demonstrated
-     * when the learner gets at least 60%
-     * of the available objective questions
-     * at that level.
-     */
-    if (score >= 0.6) {
-      strongestLevel = level;
-    }
-  }
-
-  return strongestLevel;
-}
-
-/*
- * Convert raw objective performance into
- * a normalized 0–100 percentage.
- */
+/* =========================================================
+ * PERCENTAGE
+ * ========================================================= */
 
 export function percentage(
   correct: number,
@@ -1000,38 +1125,1153 @@ export function percentage(
   }
 
   return Math.round(
-    (correct / total) * 100,
+    Math.max(
+      0,
+      Math.min(100, (correct / total) * 100),
+    ),
   );
 }
 
+/* =========================================================
+ * QUESTION SCORE
+ * ========================================================= */
+
+export function getQuestionScore(
+  question: LevelTestQuestion,
+  answer: string,
+): number {
+  if (
+    question.type !== "multiple-choice"
+  ) {
+    return 0;
+  }
+
+  return isAnswerCorrect(question, answer)
+    ? question.points
+    : 0;
+}
+
+/* =========================================================
+ * LEVEL SCORE
+ * ========================================================= */
+
+export interface LevelScore {
+  level: Level;
+  correct: number;
+  total: number;
+  percentage: number;
+}
+
+export function calculateLevelScore(
+  level: Level,
+  answers: Record<string, string>,
+): LevelScore {
+  const questions = getQuestionsByLevel(level);
+
+  let correct = 0;
+  let total = 0;
+
+  for (const question of questions) {
+    if (question.type !== "multiple-choice") {
+      continue;
+    }
+
+    const answer = answers[question.id];
+
+    if (
+      typeof answer !== "string" ||
+      answer.trim() === ""
+    ) {
+      continue;
+    }
+
+    total += 1;
+
+    if (isAnswerCorrect(question, answer)) {
+      correct += 1;
+    }
+  }
+
+  return {
+    level,
+    correct,
+    total,
+    percentage: percentage(
+      correct,
+      total,
+    ),
+  };
+}
+
+/* =========================================================
+ * SKILL SCORE
+ * ========================================================= */
+
+export interface SkillScore {
+  skill: LevelTestSkill;
+  correct: number;
+  total: number;
+  percentage: number;
+}
+
+export function calculateSkillScore(
+  skill: LevelTestSkill,
+  answers: Record<string, string>,
+): SkillScore {
+  const questions =
+    getQuestionsBySkill(skill);
+
+  let correct = 0;
+  let total = 0;
+
+  for (const question of questions) {
+    if (question.type !== "multiple-choice") {
+      continue;
+    }
+
+    const answer = answers[question.id];
+
+    if (
+      typeof answer !== "string" ||
+      answer.trim() === ""
+    ) {
+      continue;
+    }
+
+    total += 1;
+
+    if (isAnswerCorrect(question, answer)) {
+      correct += 1;
+    }
+  }
+
+  return {
+    skill,
+    correct,
+    total,
+    percentage: percentage(
+      correct,
+      total,
+    ),
+  };
+}
+
+/* =========================================================
+ * ALL SKILL SCORES
+ * ========================================================= */
+
+export function calculateAllSkillScores(
+  answers: Record<string, string>,
+): Record<
+  LevelTestSkill,
+  SkillScore
+> {
+  return {
+    reading: calculateSkillScore(
+      "reading",
+      answers,
+    ),
+
+    listening: calculateSkillScore(
+      "listening",
+      answers,
+    ),
+
+    writing: calculateSkillScore(
+      "writing",
+      answers,
+    ),
+
+    grammar: calculateSkillScore(
+      "grammar",
+      answers,
+    ),
+  };
+}
+
+/* =========================================================
+ * WRITING RUBRIC
+ * ========================================================= */
+
 /*
- * Get a human-readable description of
- * the current estimated CEFR level.
+ * Writing is not auto-scored by this file.
+ *
+ * The UI / future evaluator can provide:
+ *
+ * - taskAchievement
+ * - grammar
+ * - vocabulary
+ * - organization
+ * - coherence
+ *
+ * Each category is scored from 0–5.
  */
+
+export interface WritingRubricScore {
+  taskAchievement: number;
+  grammar: number;
+  vocabulary: number;
+  organization: number;
+  coherence: number;
+}
+
+export interface WritingEvaluation {
+  score: number;
+  percentage: number;
+  level: Level;
+}
+
+function clampRubricScore(
+  value: number,
+): number {
+  return Math.max(
+    0,
+    Math.min(5, Math.round(value)),
+  );
+}
+
+export function evaluateWriting(
+  rubric: WritingRubricScore,
+): WritingEvaluation {
+  const taskAchievement =
+    clampRubricScore(
+      rubric.taskAchievement,
+    );
+
+  const grammar =
+    clampRubricScore(rubric.grammar);
+
+  const vocabulary =
+    clampRubricScore(rubric.vocabulary);
+
+  const organization =
+    clampRubricScore(
+      rubric.organization,
+    );
+
+  const coherence =
+    clampRubricScore(
+      rubric.coherence,
+    );
+
+  const total =
+    taskAchievement +
+    grammar +
+    vocabulary +
+    organization +
+    coherence;
+
+  const maxScore = 25;
+
+  const writingPercentage = percentage(
+    total,
+    maxScore,
+  );
+
+  let level: Level = "A1";
+
+  if (writingPercentage >= 90) {
+    level = "C2";
+  } else if (writingPercentage >= 80) {
+    level = "C1";
+  } else if (writingPercentage >= 68) {
+    level = "B2";
+  } else if (writingPercentage >= 55) {
+    level = "B1";
+  } else if (writingPercentage >= 40) {
+    level = "A2";
+  } else {
+    level = "A1";
+  }
+
+  return {
+    score: total,
+    percentage: writingPercentage,
+    level,
+  };
+}
+
+/* =========================================================
+ * PROGRESSIVE LEVEL CALCULATION
+ * ========================================================= */
+
+export function calculateProgressiveLevel(
+  levelScores: Record<
+    Level,
+    number
+  >,
+): Level {
+  let strongestLevel: Level = "A1";
+
+  for (const level of levelOrder) {
+    const score =
+      levelScores[level] ?? 0;
+
+    if (
+      score >=
+      LEVEL_MASTERY_THRESHOLD
+    ) {
+      strongestLevel = level;
+    } else {
+      break;
+    }
+  }
+
+  return strongestLevel;
+}
+
+/* =========================================================
+ * OBJECTIVE LEVEL ESTIMATION
+ * ========================================================= */
+
+export function estimateLevelFromAnswers(
+  answers: Record<string, string>,
+): Level {
+  let strongestLevel: Level = "A1";
+
+  for (const level of levelOrder) {
+    const score =
+      calculateLevelScore(
+        level,
+        answers,
+      );
+
+    /*
+     * Do not judge an untouched level.
+     */
+    if (score.total === 0) {
+      break;
+    }
+
+    const ratio =
+      score.correct /
+      score.total;
+
+    if (
+      ratio >=
+      LEVEL_MASTERY_THRESHOLD
+    ) {
+      strongestLevel = level;
+    } else {
+      break;
+    }
+  }
+
+  return strongestLevel;
+}
+
+/* =========================================================
+ * ADAPTIVE TEST TYPES
+ * ========================================================= */
+
+export interface AdaptiveAnswer {
+  questionId: string;
+  level: Level;
+  skill: LevelTestSkill;
+  correct: boolean;
+}
+
+export interface AdaptiveState {
+  currentLevel: Level;
+  answeredQuestionIds: string[];
+  answers: Record<string, string>;
+  history: AdaptiveAnswer[];
+  consecutiveCorrect: number;
+  consecutiveIncorrect: number;
+  highestDemonstratedLevel: Level;
+  lowestWeakLevel: Level | null;
+  completed: boolean;
+}
+
+/* =========================================================
+ * ADAPTIVE STATE CREATOR
+ * ========================================================= */
+
+export function createAdaptiveState(): AdaptiveState {
+  return {
+    currentLevel: "A1",
+    answeredQuestionIds: [],
+    answers: {},
+    history: [],
+    consecutiveCorrect: 0,
+    consecutiveIncorrect: 0,
+    highestDemonstratedLevel: "A1",
+    lowestWeakLevel: null,
+    completed: false,
+  };
+}
+
+/* =========================================================
+ * RECENT PERFORMANCE
+ * ========================================================= */
+
+export function getRecentAnswers(
+  state: AdaptiveState,
+  size = ADAPTIVE_WINDOW_SIZE,
+): AdaptiveAnswer[] {
+  return state.history.slice(-size);
+}
+
+export function getRecentAccuracy(
+  state: AdaptiveState,
+  size = ADAPTIVE_WINDOW_SIZE,
+): number {
+  const recent =
+    getRecentAnswers(state, size);
+
+  if (recent.length === 0) {
+    return 0;
+  }
+
+  const correct =
+    recent.filter(
+      (item) => item.correct,
+    ).length;
+
+  return correct / recent.length;
+}
+
+/* =========================================================
+ * UPDATE ADAPTIVE STATE
+ * ========================================================= */
+
+export function recordAdaptiveAnswer(
+  state: AdaptiveState,
+  question: LevelTestQuestion,
+  answer: string,
+): AdaptiveState {
+  const correct =
+    isAnswerCorrect(
+      question,
+      answer,
+    );
+
+  const nextState: AdaptiveState = {
+    ...state,
+    answeredQuestionIds: [
+      ...state.answeredQuestionIds,
+      question.id,
+    ],
+    answers: {
+      ...state.answers,
+      [question.id]: answer,
+    },
+    history: [
+      ...state.history,
+      {
+        questionId: question.id,
+        level: question.level,
+        skill: question.skill,
+        correct,
+      },
+    ],
+  };
+
+  if (correct) {
+    nextState.consecutiveCorrect =
+      state.consecutiveCorrect + 1;
+
+    nextState.consecutiveIncorrect = 0;
+  } else {
+    nextState.consecutiveIncorrect =
+      state.consecutiveIncorrect + 1;
+
+    nextState.consecutiveCorrect = 0;
+  }
+
+  const levelScore =
+    calculateLevelScore(
+      question.level,
+      nextState.answers,
+    );
+
+  if (
+    levelScore.total > 0 &&
+    levelScore.percentage >=
+      LEVEL_MASTERY_THRESHOLD * 100
+  ) {
+    nextState.highestDemonstratedLevel =
+      question.level;
+  }
+
+  if (
+    levelScore.total >= 2 &&
+    levelScore.percentage <
+      LEVEL_STOP_THRESHOLD * 100
+  ) {
+    nextState.lowestWeakLevel =
+      question.level;
+  }
+
+  nextState.currentLevel =
+    determineNextAdaptiveLevel(
+      nextState,
+    );
+
+  nextState.completed =
+    shouldFinishTest(
+      nextState,
+    );
+
+  return nextState;
+}
+
+/* =========================================================
+ * DETERMINE NEXT LEVEL
+ * ========================================================= */
+
+export function determineNextAdaptiveLevel(
+  state: AdaptiveState,
+): Level {
+  const current =
+    state.currentLevel;
+
+  /*
+   * Four consecutive correct answers indicate
+   * strong evidence that the learner can attempt
+   * the next CEFR level.
+   */
+  if (
+    state.consecutiveCorrect >= 3
+  ) {
+    return (
+      getNextLevel(current) ??
+      current
+    );
+  }
+
+  /*
+   * Four consecutive incorrect answers indicate
+   * that moving upward is probably premature.
+   */
+  if (
+    state.consecutiveIncorrect >= 3
+  ) {
+    return current;
+  }
+
+  /*
+   * Recent performance can also move the learner
+   * upward when there is a strong pattern.
+   */
+  const recentAccuracy =
+    getRecentAccuracy(state);
+
+  if (
+    state.history.length >= 4 &&
+    recentAccuracy >=
+      LEVEL_ADVANCE_THRESHOLD
+  ) {
+    return (
+      getNextLevel(current) ??
+      current
+    );
+  }
+
+  return current;
+}
+
+/* =========================================================
+ * SHOULD FINISH
+ * ========================================================= */
+
+export function shouldFinishTest(
+  state: AdaptiveState,
+): boolean {
+  const answered =
+    state.answeredQuestionIds.length;
+
+  /*
+   * Never finish before the minimum number
+   * of questions.
+   */
+  if (
+    answered <
+    MIN_LEVEL_TEST_QUESTIONS
+  ) {
+    return false;
+  }
+
+  /*
+   * Always stop at 50.
+   */
+  if (
+    answered >=
+    MAX_LEVEL_TEST_QUESTIONS
+  ) {
+    return true;
+  }
+
+  /*
+   * Early finish:
+   *
+   * If the learner has demonstrated a level
+   * and then repeatedly performs strongly,
+   * the engine can finish without forcing
+   * unnecessary questions.
+   */
+  if (
+    answered >=
+      EARLY_FINISH_MIN_QUESTIONS &&
+    state.consecutiveCorrect >= 4
+  ) {
+    const next =
+      getNextLevel(
+        state.highestDemonstratedLevel,
+      );
+
+    /*
+     * C2 is already the highest level.
+     */
+    if (
+      state.highestDemonstratedLevel ===
+      "C2"
+    ) {
+      return true;
+    }
+
+    /*
+     * If the current level is already high
+     * and the learner is consistently strong,
+     * confidence is sufficient.
+     */
+    if (
+      next === null ||
+      getLevelIndex(
+        state.highestDemonstratedLevel,
+      ) >= 4
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/* =========================================================
+ * GET NEXT QUESTION
+ * ========================================================= */
+
+export function getNextAdaptiveQuestion(
+  state: AdaptiveState,
+): LevelTestQuestion | null {
+  if (state.completed) {
+    return null;
+  }
+
+  if (
+    state.answeredQuestionIds.length >=
+    MAX_LEVEL_TEST_QUESTIONS
+  ) {
+    return null;
+  }
+
+  /*
+   * First try the current adaptive level.
+   */
+  const currentLevelQuestions =
+    getQuestionsByLevel(
+      state.currentLevel,
+    ).filter(
+      (question) =>
+        !state.answeredQuestionIds.includes(
+          question.id,
+        ),
+    );
+
+  if (
+    currentLevelQuestions.length > 0
+  ) {
+    return selectBalancedQuestion(
+      currentLevelQuestions,
+      state,
+    );
+  }
+
+  /*
+   * If the current level has no unused
+   * questions, try the next level.
+   */
+  const nextLevel =
+    getNextLevel(
+      state.currentLevel,
+    );
+
+  if (nextLevel) {
+    const nextQuestions =
+      getQuestionsByLevel(
+        nextLevel,
+      ).filter(
+        (question) =>
+          !state.answeredQuestionIds.includes(
+            question.id,
+          ),
+      );
+
+    if (nextQuestions.length > 0) {
+      return selectBalancedQuestion(
+        nextQuestions,
+        state,
+      );
+    }
+  }
+
+  /*
+   * Final fallback:
+   * find any unused question.
+   */
+  const remaining =
+    levelTestQuestions.filter(
+      (question) =>
+        !state.answeredQuestionIds.includes(
+          question.id,
+        ),
+    );
+
+  if (remaining.length === 0) {
+    return null;
+  }
+
+  return selectBalancedQuestion(
+    remaining,
+    state,
+  );
+}
+
+/* =========================================================
+ * BALANCED QUESTION SELECTION
+ * ========================================================= */
+
+export function selectBalancedQuestion(
+  questions: LevelTestQuestion[],
+  state: AdaptiveState,
+): LevelTestQuestion {
+  /*
+   * Count recent skills so we can avoid asking
+   * too many questions from the same skill.
+   */
+  const recentSkills =
+    getRecentAnswers(
+      state,
+      5,
+    ).map(
+      (item) => item.skill,
+    );
+
+  const skillCounts =
+    new Map<
+      LevelTestSkill,
+      number
+    >();
+
+  for (const skill of recentSkills) {
+    skillCounts.set(
+      skill,
+      (skillCounts.get(skill) ?? 0) + 1,
+    );
+  }
+
+  /*
+   * Prefer skills that have appeared less recently.
+   */
+  const sorted = [...questions].sort(
+    (a, b) => {
+      const aCount =
+        skillCounts.get(a.skill) ?? 0;
+
+      const bCount =
+        skillCounts.get(b.skill) ?? 0;
+
+      return aCount - bCount;
+    },
+  );
+
+  return sorted[0];
+}
+
+/* =========================================================
+ * TEST RESULT
+ * ========================================================= */
+
+export interface LevelTestResultSummary {
+  overallLevel: Level;
+  overallPercentage: number;
+
+  skillLevels: Record<
+    LevelTestSkill,
+    Level
+  >;
+
+  skillScores: Record<
+    LevelTestSkill,
+    SkillScore
+  >;
+
+  levelScores: Record<
+    Level,
+    LevelScore
+  >;
+
+  questionsAnswered: number;
+
+  completed: boolean;
+}
+
+/* =========================================================
+ * SKILL → CEFR
+ * ========================================================= */
+
+export function percentageToLevel(
+  score: number,
+): Level {
+  if (score >= 90) {
+    return "C2";
+  }
+
+  if (score >= 80) {
+    return "C1";
+  }
+
+  if (score >= 68) {
+    return "B2";
+  }
+
+  if (score >= 55) {
+    return "B1";
+  }
+
+  if (score >= 40) {
+    return "A2";
+  }
+
+  return "A1";
+}
+
+/* =========================================================
+ * CALCULATE FINAL RESULT
+ * ========================================================= */
+
+export function calculateLevelTestResult(
+  state: AdaptiveState,
+  writingEvaluation?: WritingEvaluation,
+): LevelTestResultSummary {
+  const levelScores =
+    {} as Record<
+      Level,
+      LevelScore
+    >;
+
+  for (const level of levelOrder) {
+    levelScores[level] =
+      calculateLevelScore(
+        level,
+        state.answers,
+      );
+  }
+
+  const skillScores =
+    calculateAllSkillScores(
+      state.answers,
+    );
+
+  /*
+   * Writing questions are open-ended, so the
+   * objective score for writing remains zero
+   * until an evaluation is supplied.
+   */
+  if (writingEvaluation) {
+    skillScores.writing = {
+      skill: "writing",
+      correct: writingEvaluation.score,
+      total: 25,
+      percentage:
+        writingEvaluation.percentage,
+    };
+  }
+
+  const skillLevels: Record<
+    LevelTestSkill,
+    Level
+  > = {
+    reading: percentageToLevel(
+      skillScores.reading.percentage,
+    ),
+
+    listening: percentageToLevel(
+      skillScores.listening.percentage,
+    ),
+
+    writing: writingEvaluation
+      ? writingEvaluation.level
+      : "A1",
+
+    grammar: percentageToLevel(
+      skillScores.grammar.percentage,
+    ),
+  };
+
+  /*
+   * Calculate objective overall performance.
+   */
+  const objectiveQuestions =
+    state.history.filter(
+      (item) => {
+        const question =
+          levelTestQuestions.find(
+            (q) =>
+              q.id === item.questionId,
+          );
+
+        return (
+          question?.type ===
+          "multiple-choice"
+        );
+      },
+    );
+
+  const objectiveCorrect =
+    objectiveQuestions.filter(
+      (item) => item.correct,
+    ).length;
+
+  const objectivePercentage =
+    percentage(
+      objectiveCorrect,
+      objectiveQuestions.length,
+    );
+
+  /*
+   * Writing contributes to the final result
+   * when it has been evaluated.
+   */
+  const finalPercentage =
+    writingEvaluation
+      ? Math.round(
+          objectivePercentage * 0.8 +
+            writingEvaluation.percentage *
+              0.2,
+        )
+      : objectivePercentage;
+
+  let overallLevel =
+    percentageToLevel(
+      finalPercentage,
+    );
+
+  /*
+   * Progressive evidence is stronger than
+   * raw percentage alone.
+   *
+   * Do not award a high CEFR level merely because
+   * the learner answered lower-level questions well.
+   */
+  const demonstratedLevel =
+    state.highestDemonstratedLevel;
+
+  if (
+    getLevelIndex(overallLevel) >
+    getLevelIndex(demonstratedLevel)
+  ) {
+    overallLevel =
+      demonstratedLevel;
+  }
+
+  return {
+    overallLevel,
+    overallPercentage:
+      finalPercentage,
+
+    skillLevels,
+
+    skillScores,
+
+    levelScores,
+
+    questionsAnswered:
+      state.answeredQuestionIds.length,
+
+    completed: state.completed,
+  };
+}
+
+/* =========================================================
+ * SIMPLE LEVEL DESCRIPTION
+ * ========================================================= */
 
 export function getLevelDescription(
   level: Level,
 ): string {
-  switch (level) {
-    case "A1":
-      return "Beginner";
+  return (
+    levelDescriptions[level] ??
+    "Beginner"
+  );
+}
 
-    case "A2":
-      return "Elementary";
+/* =========================================================
+ * PROGRESSIVE LEVEL FROM RAW SCORES
+ * ========================================================= */
 
-    case "B1":
-      return "Intermediate";
+export function calculateProgressiveLevelFromScores(
+  levelScores: Record<
+    Level,
+    number
+  >,
+): Level {
+  let strongestLevel: Level = "A1";
 
-    case "B2":
-      return "Upper-Intermediate";
+  for (const level of levelOrder) {
+    const score =
+      levelScores[level] ?? 0;
 
-    case "C1":
-      return "Advanced";
-
-    case "C2":
-      return "Proficient";
-
-    default:
-      return "Beginner";
+    if (
+      score >=
+      LEVEL_MASTERY_THRESHOLD
+    ) {
+      strongestLevel = level;
+    } else {
+      /*
+       * CEFR levels are progressive.
+       * If a learner does not demonstrate
+       * B1, we should not automatically award
+       * B2 or C1 based on isolated answers.
+       */
+      break;
+    }
   }
+
+  return strongestLevel;
+}
+
+/* =========================================================
+ * LEVEL TEST SUMMARY
+ * ========================================================= */
+
+export function getLevelTestSummary(
+  state: AdaptiveState,
+): {
+  questionsAnswered: number;
+  questionsRemaining: number;
+  currentLevel: Level;
+  currentLevelDescription: string;
+  highestDemonstratedLevel: Level;
+  completed: boolean;
+  progressPercentage: number;
+} {
+  const answered =
+    state.answeredQuestionIds.length;
+
+  return {
+    questionsAnswered: answered,
+
+    questionsRemaining:
+      Math.max(
+        0,
+        MAX_LEVEL_TEST_QUESTIONS -
+          answered,
+      ),
+
+    currentLevel:
+      state.currentLevel,
+
+    currentLevelDescription:
+      getLevelDescription(
+        state.currentLevel,
+      ),
+
+    highestDemonstratedLevel:
+      state.highestDemonstratedLevel,
+
+    completed:
+      state.completed,
+
+    progressPercentage:
+      percentage(
+        answered,
+        MAX_LEVEL_TEST_QUESTIONS,
+      ),
+  };
+}
+
+/* =========================================================
+ * DEFAULT ANSWER MAP
+ * ========================================================= */
+
+export function createEmptyAnswers(): Record<
+  string,
+  string
+> {
+  return {};
+}
+
+/* =========================================================
+ * DEFAULT LEVEL SCORES
+ * ========================================================= */
+
+export function createEmptyLevelScores(): Record<
+  Level,
+  number
+> {
+  return {
+    A1: 0,
+    A2: 0,
+    B1: 0,
+    B2: 0,
+    C1: 0,
+    C2: 0,
+  };
+}
+
+/* =========================================================
+ * DEFAULT SKILL SCORES
+ * ========================================================= */
+
+export function createEmptySkillScores(): Record<
+  LevelTestSkill,
+  SkillScore
+> {
+  return {
+    reading: {
+      skill: "reading",
+      correct: 0,
+      total: 0,
+      percentage: 0,
+    },
+
+    listening: {
+      skill: "listening",
+      correct: 0,
+      total: 0,
+      percentage: 0,
+    },
+
+    writing: {
+      skill: "writing",
+      correct: 0,
+      total: 0,
+      percentage: 0,
+    },
+
+    grammar: {
+      skill: "grammar",
+      correct: 0,
+      total: 0,
+      percentage: 0,
+    },
+  };
+}
+
+/* =========================================================
+ * FINAL BANK CHECK
+ * ========================================================= */
+
+const bankValidation =
+  validateLevelTestBank();
+
+if (
+  !bankValidation.valid
+) {
+  console.warn(
+    "DRE2learn Level Test bank validation failed:",
+    bankValidation,
+  );
 }
