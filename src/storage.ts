@@ -1,41 +1,59 @@
-import type { AppState } from "../types";
+import type { AppState } from "./types";
 
 const STORAGE_KEY = "dre2learn_state";
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 3;
 
 interface StoredData {
   version: number;
   state: AppState;
 }
 
-function createSafeState(state: Partial<AppState>): AppState {
+function createSafeState(
+  state: Partial<AppState>,
+): AppState {
   const user = state.user
     ? {
         ...state.user,
+
+        countryCode:
+          typeof state.user.countryCode === "string" &&
+          state.user.countryCode.trim().length > 0
+            ? state.user.countryCode
+                .trim()
+                .toUpperCase()
+            : "UN",
+
         xp:
           typeof state.user.xp === "number"
             ? state.user.xp
             : 0,
+
         identityCard:
           state.user.identityCard ?? null,
+
         levelTestCompleted:
           state.user.levelTestCompleted ?? false,
+
+        levelTestResult:
+          state.user.levelTestResult ?? null,
       }
     : null;
 
   return {
-    page: state.page ?? "welcome",
+    page:
+      state.page ?? "welcome",
+
     user,
 
-    vocabulary: Array.isArray(state.vocabulary)
-      ? state.vocabulary
-      : [],
+    vocabulary:
+      Array.isArray(state.vocabulary)
+        ? state.vocabulary
+        : [],
 
-    completedArticles: Array.isArray(
-      state.completedArticles,
-    )
-      ? state.completedArticles
-      : [],
+    completedArticles:
+      Array.isArray(state.completedArticles)
+        ? state.completedArticles
+        : [],
 
     practiceScore:
       typeof state.practiceScore === "number"
@@ -64,10 +82,18 @@ function createSafeState(state: Partial<AppState>): AppState {
     isAuthenticated:
       state.isAuthenticated ?? false,
 
+    // ==================================================
+    // XP
+    // ==================================================
+
     totalXp:
       typeof state.totalXp === "number"
         ? state.totalXp
         : user?.xp ?? 0,
+
+    // ==================================================
+    // PROGRESS
+    // ==================================================
 
     articlesRead:
       typeof state.articlesRead === "number"
@@ -94,6 +120,10 @@ function createSafeState(state: Partial<AppState>): AppState {
         ? state.cardsCollected
         : 0,
 
+    // ==================================================
+    // LEVEL TEST
+    // ==================================================
+
     levelTestScore:
       typeof state.levelTestScore === "number"
         ? state.levelTestScore
@@ -103,10 +133,65 @@ function createSafeState(state: Partial<AppState>): AppState {
       typeof state.levelTestTotal === "number"
         ? state.levelTestTotal
         : 0,
+
+    levelTestAnswers:
+      Array.isArray(state.levelTestAnswers)
+        ? state.levelTestAnswers
+        : [],
+
+    levelTestResult:
+      state.levelTestResult ?? null,
+
+    // ==================================================
+    // CARDS
+    // ==================================================
+
+    collectedCards:
+      Array.isArray(state.collectedCards)
+        ? state.collectedCards
+        : [],
+
+    // ==================================================
+    // ROOMS
+    // ==================================================
+
+    joinedRoomId:
+      typeof state.joinedRoomId === "string"
+        ? state.joinedRoomId
+        : null,
+
+    // ==================================================
+    // SETTINGS
+    // ==================================================
+
+    settings: state.settings ?? {
+      notifications: true,
+      soundEffects: true,
+      autoplayAudio: true,
+      privateMessages: true,
+      showOnlineStatus: true,
+      preferredTheme: "system",
+      preferredLanguage: "en",
+    },
+
+    // ==================================================
+    // UPDATES
+    // ==================================================
+
+    seenUpdates:
+      Array.isArray(state.seenUpdates)
+        ? state.seenUpdates
+        : [],
   };
 }
 
-export function saveState(state: AppState): void {
+// ======================================================
+// SAVE
+// ======================================================
+
+export function saveState(
+  state: AppState,
+): void {
   try {
     const data: StoredData = {
       version: STORAGE_VERSION,
@@ -125,6 +210,10 @@ export function saveState(state: AppState): void {
   }
 }
 
+// ======================================================
+// LOAD
+// ======================================================
+
 export function loadStoredState(): AppState | null {
   try {
     const stored =
@@ -134,21 +223,42 @@ export function loadStoredState(): AppState | null {
       return null;
     }
 
-    const parsed = JSON.parse(stored);
+    const parsed: unknown =
+      JSON.parse(stored);
 
     if (
       parsed &&
       typeof parsed === "object" &&
       "state" in parsed
     ) {
+      const storedData =
+        parsed as {
+          version?: number;
+          state?: Partial<AppState>;
+        };
+
+      if (
+        storedData.state &&
+        typeof storedData.state === "object"
+      ) {
+        return createSafeState(
+          storedData.state,
+        );
+      }
+
+      return null;
+    }
+
+    if (
+      parsed &&
+      typeof parsed === "object"
+    ) {
       return createSafeState(
-        parsed.state as Partial<AppState>,
+        parsed as Partial<AppState>,
       );
     }
 
-    return createSafeState(
-      parsed as Partial<AppState>,
-    );
+    return null;
   } catch (error) {
     console.error(
       "DRE2learn: unable to load application state.",
@@ -159,9 +269,15 @@ export function loadStoredState(): AppState | null {
   }
 }
 
+// ======================================================
+// CLEAR
+// ======================================================
+
 export function clearStoredState(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(
+      STORAGE_KEY,
+    );
   } catch (error) {
     console.error(
       "DRE2learn: unable to clear application state.",
@@ -169,6 +285,10 @@ export function clearStoredState(): void {
     );
   }
 }
+
+// ======================================================
+// XP
+// ======================================================
 
 export function addXP(
   state: AppState,
@@ -195,11 +315,16 @@ export function addXP(
     user: state.user
       ? {
           ...state.user,
-          xp: currentUserXp + amount,
+          xp:
+            currentUserXp + amount,
         }
       : null,
   };
 }
+
+// ======================================================
+// ARTICLES
+// ======================================================
 
 export function markArticleCompleted(
   state: AppState,
@@ -231,16 +356,29 @@ export function markArticleCompleted(
   );
 }
 
+// ======================================================
+// VOCABULARY
+// ======================================================
+
 export function addVocabularyWord(
   state: AppState,
 ): AppState {
-  return {
+  const updatedState: AppState = {
     ...state,
 
     vocabularyLearned:
       state.vocabularyLearned + 1,
   };
+
+  return addXP(
+    updatedState,
+    2,
+  );
 }
+
+// ======================================================
+// PRACTICE
+// ======================================================
 
 export function markPracticeCompleted(
   state: AppState,
@@ -258,24 +396,42 @@ export function markPracticeCompleted(
   );
 }
 
+// ======================================================
+// ROOMS
+// ======================================================
+
 export function markRoomJoined(
   state: AppState,
 ): AppState {
-  return {
+  const updatedState: AppState = {
     ...state,
 
     roomsJoined:
       state.roomsJoined + 1,
   };
+
+  return addXP(
+    updatedState,
+    5,
+  );
 }
+
+// ======================================================
+// CARDS
+// ======================================================
 
 export function addCollectedCard(
   state: AppState,
 ): AppState {
-  return {
+  const updatedState: AppState = {
     ...state,
 
     cardsCollected:
       state.cardsCollected + 1,
   };
+
+  return addXP(
+    updatedState,
+    3,
+  );
 }
