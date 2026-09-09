@@ -1,92 +1,93 @@
-import { logoMarkup } from "../components/logo";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  type User,
+} from "firebase/auth";
 
-export function authPageMarkup(): string {
-  return `
-    <main class="public-page auth-page">
-      <div class="auth-container">
+import { auth, googleProvider } from "./firebase";
+import {
+  createOwnerAccount,
+  createUserAccount,
+  DRE2LEARN_OWNER_ID,
+  DRE2LEARN_USERNAME,
+  DRE2LEARN_DISPLAY_NAME,
+  type Account,
+} from "./data/accounts";
 
-        <div class="auth-brand">
-          ${logoMarkup()}
-        </div>
+export const DRE2LEARN_OWNER_EMAIL = "zynbhamdaltayy@gmail.com";
 
-        <section class="auth-card">
-          <div class="auth-card-header">
-            <span class="eyebrow">
-              Welcome
-            </span>
+export function isDRE2learnOwnerEmail(email: string | null | undefined): boolean {
+  return (
+    typeof email === "string" &&
+    email.trim().toLowerCase() === DRE2LEARN_OWNER_EMAIL
+  );
+}
 
-            <h1>
-              Start learning English
-            </h1>
+export async function signInWithGoogle(): Promise<{
+  firebaseUser: User;
+  account: Account;
+}> {
+  const result = await signInWithPopup(auth, googleProvider);
+  const firebaseUser = result.user;
 
-            <p>
-              Create an account or continue with
-              your existing account.
-            </p>
-          </div>
+  const email = firebaseUser.email?.trim().toLowerCase() ?? "";
 
-          <div class="auth-choice-grid">
+  if (isDRE2learnOwnerEmail(email)) {
+    const owner = createOwnerAccount({
+      id: DRE2LEARN_OWNER_ID,
+      username: DRE2LEARN_USERNAME,
+      displayName: DRE2LEARN_DISPLAY_NAME,
+      email,
+      avatar: null,
+      level: "A1",
+      xp: 0,
+      countryCode: "",
+      bio: "Official DRE2learn account.",
+    });
 
-            <button
-              type="button"
-              class="auth-choice"
-              data-page="signup"
-            >
-              <span class="auth-choice-icon">
-                +
-              </span>
+    return {
+      firebaseUser,
+      account: owner,
+    };
+  }
 
-              <span class="auth-choice-content">
-                <strong>
-                  Create an account
-                </strong>
+  const user = createUserAccount({
+    id: firebaseUser.uid,
+    username:
+      firebaseUser.displayName?.trim() ||
+      email.split("@")[0] ||
+      "User",
+    displayName:
+      firebaseUser.displayName?.trim() ||
+      email.split("@")[0] ||
+      "User",
+    email,
+    avatar: null,
+    level: "A1",
+    xp: 0,
+    countryCode: "",
+    bio: "",
+  });
 
-                <small>
-                  Start your DRE2learn journey
-                </small>
-              </span>
+  return {
+    firebaseUser,
+    account: user,
+  };
+}
 
-              <span class="auth-choice-arrow">
-                →
-              </span>
-            </button>
+export async function signOutGoogle(): Promise<void> {
+  await signOut(auth);
+}
 
-            <button
-              type="button"
-              class="auth-choice"
-              data-page="login"
-            >
-              <span class="auth-choice-icon">
-                →
-              </span>
+export function getCurrentFirebaseUser(): User | null {
+  return auth.currentUser;
+}
 
-              <span class="auth-choice-content">
-                <strong>
-                  Log in
-                </strong>
+export function isCurrentUserOwner(): boolean {
+  return isDRE2learnOwnerEmail(auth.currentUser?.email);
+}
 
-                <small>
-                  Continue where you left off
-                </small>
-              </span>
-
-              <span class="auth-choice-arrow">
-                →
-              </span>
-            </button>
-
-          </div>
-
-          <button
-            type="button"
-            class="text-button auth-back"
-            data-page="welcome"
-          >
-            ← Back
-          </button>
-        </section>
-
-      </div>
-    </main>
-  `;
+export function getGoogleProvider(): GoogleAuthProvider {
+  return googleProvider;
 }
