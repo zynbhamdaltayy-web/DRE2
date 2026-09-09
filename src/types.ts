@@ -17,7 +17,6 @@ export type Page =
   | "settings"
   | "updates";
 
-
 // ======================================================
 // CEFR LEVELS
 // ======================================================
@@ -29,7 +28,6 @@ export type Level =
   | "B2"
   | "C1"
   | "C2";
-
 
 // ======================================================
 // AVATAR
@@ -88,7 +86,6 @@ export interface Avatar {
   hijab: boolean;
 }
 
-
 // ======================================================
 // LIBRARY / ARTICLES
 // ======================================================
@@ -123,7 +120,6 @@ export interface ComprehensionQuestion {
   correctAnswer: string;
 }
 
-
 // ======================================================
 // VOCABULARY
 // ======================================================
@@ -138,7 +134,6 @@ export interface VocabularyWord {
 
   savedAt: string;
 }
-
 
 // ======================================================
 // PRACTICE
@@ -156,7 +151,6 @@ export interface PracticeQuestion {
 
   explanation: string;
 }
-
 
 // ======================================================
 // LEVEL TEST
@@ -196,7 +190,6 @@ export interface LevelTestQuestion {
   points: number;
 }
 
-
 // ======================================================
 // LEVEL TEST ANSWER
 // ======================================================
@@ -210,7 +203,6 @@ export interface LevelTestAnswer {
 
   pointsEarned?: number;
 }
-
 
 // ======================================================
 // LEVEL TEST RESULT
@@ -248,7 +240,6 @@ export interface LevelTestResult {
   completedAt: string;
 }
 
-
 // ======================================================
 // XP
 // ======================================================
@@ -267,7 +258,6 @@ export interface XpReward {
 
   description: string;
 }
-
 
 // ======================================================
 // CARDS GAME
@@ -305,7 +295,6 @@ export interface CollectedCard {
 
   timesPlayed: number;
 }
-
 
 // ======================================================
 // ROOMS
@@ -350,7 +339,6 @@ export interface LearningRoom {
   isActive: boolean;
 }
 
-
 // ======================================================
 // IDENTITY CARD / الموحدة
 // ======================================================
@@ -363,7 +351,6 @@ export interface IdentityCard {
   renewalXpCost?: number;
 }
 
-
 // ======================================================
 // USER PROFILE
 // ======================================================
@@ -372,6 +359,10 @@ export interface UserProfile {
   name: string;
 
   email: string;
+
+  // ISO 3166-1 alpha-2 country code.
+  // Examples: IQ, US, GB, CA, JP...
+  countryCode: string;
 
   level: Level;
 
@@ -385,7 +376,6 @@ export interface UserProfile {
 
   levelTestResult?: LevelTestResult | null;
 }
-
 
 // ======================================================
 // SETTINGS
@@ -406,7 +396,6 @@ export interface AppSettings {
 
   preferredLanguage: "en" | "ar";
 }
-
 
 // ======================================================
 // UPDATES
@@ -434,7 +423,6 @@ export interface AppUpdate {
   isNew: boolean;
 }
 
-
 // ======================================================
 // PROGRESS
 // ======================================================
@@ -456,7 +444,6 @@ export interface ProgressStats {
 
   levelTestTotal: number;
 }
-
 
 // ======================================================
 // APPLICATION STATE
@@ -485,13 +472,11 @@ export interface AppState {
 
   isAuthenticated: boolean;
 
-
   // ----------------------------------------------------
   // XP
   // ----------------------------------------------------
 
   totalXp: number;
-
 
   // ----------------------------------------------------
   // Progress
@@ -507,7 +492,6 @@ export interface AppState {
 
   cardsCollected: number;
 
-
   // ----------------------------------------------------
   // Level Test
   // ----------------------------------------------------
@@ -520,13 +504,11 @@ export interface AppState {
 
   levelTestResult?: LevelTestResult | null;
 
-
   // ----------------------------------------------------
   // Cards
   // ----------------------------------------------------
 
   collectedCards?: CollectedCard[];
-
 
   // ----------------------------------------------------
   // Rooms
@@ -534,13 +516,11 @@ export interface AppState {
 
   joinedRoomId?: string | null;
 
-
   // ----------------------------------------------------
   // Settings
   // ----------------------------------------------------
 
   settings?: AppSettings;
-
 
   // ----------------------------------------------------
   // Updates
@@ -548,3 +528,5 @@ export interface AppState {
 
   seenUpdates?: string[];
 }
+
+
