@@ -97,12 +97,47 @@ export interface PracticeQuestion {
   explanation: string;
 }
 
+/* =========================
+   LEVEL TEST
+========================= */
+
+export interface LevelTestQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  level: Level;
+}
+
+/* =========================
+   IDENTITY CARD
+========================= */
+
+export interface IdentityCard {
+  issuedAt: string;
+  expiresAt: string;
+}
+
+/* =========================
+   USER PROFILE
+========================= */
+
 export interface UserProfile {
   name: string;
   email: string;
   level: Level;
   avatar: Avatar;
+
+  xp: number;
+
+  identityCard: IdentityCard | null;
+
+  levelTestCompleted: boolean;
 }
+
+/* =========================
+   APP STATE
+========================= */
 
 export interface AppState {
   page: Page;
@@ -126,4 +161,24 @@ export interface AppState {
   selectedPracticeLevel: Level;
 
   isAuthenticated: boolean;
+
+  /* Progress */
+
+  totalXp: number;
+
+  articlesRead: number;
+
+  vocabularyLearned: number;
+
+  practiceCompleted: number;
+
+  roomsJoined: number;
+
+  cardsCollected: number;
+
+  /* Level Test */
+
+  levelTestScore: number;
+
+  levelTestTotal: number;
 }
