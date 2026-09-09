@@ -10,67 +10,40 @@ import {
   spendXp,
 } from "./xp";
 
-/* -------------------------------------------------------------------------- */
-/* DRE2LEARN IDENTITY CARD                                                    */
-/* -------------------------------------------------------------------------- */
-
-/*
- * The DRE2learn Identity Card ("الموحدة") is GLOBAL.
- *
- * The card automatically uses the user's country:
- *
- * - Country name
- * - Country code
- * - Country flag
- * - Country map
- *
- * The card also contains:
- *
- * - User name
- * - XP
- * - Language level
- * - Issue date
- * - Expiry date
- *
- * The visual identity uses the DRE2learn orange
- * inspired by Apple's Cosmic Orange.
- */
-
-/* -------------------------------------------------------------------------- */
-/* BRAND                                                                      */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// DRE2LEARN IDENTITY CARD / الموحدة
+// ======================================================
 
 /**
+ * DRE2learn brand orange.
+ *
+ * This is a DRE2learn visual reference inspired by
+ * Apple's Cosmic Orange.
+ *
  * Apple does not publish an official HEX value for
- * Cosmic Orange.
- *
- * Therefore this is a DRE2learn visual reference,
- * not an Apple-certified HEX value.
- *
- * The final visual color can be adjusted during
- * the final UI design pass.
+ * Cosmic Orange, so this is NOT an Apple-certified HEX.
  */
-export const DRE2LEARN_ORANGE =
-  "#E86F24";
+export const DRE2LEARN_ORANGE = "#E86F24";
 
-/**
- * Main Identity Card background.
- */
-export const IDENTITY_CARD_BACKGROUND =
-  "#FFF8F3";
+export const IDENTITY_CARD_BACKGROUND = "#FFF8F3";
 
-/**
- * Global Identity Card theme.
- */
 export const IDENTITY_CARD_THEME = {
   primary: DRE2LEARN_ORANGE,
-  background:
-    IDENTITY_CARD_BACKGROUND,
+  background: IDENTITY_CARD_BACKGROUND,
 } as const;
 
-/* -------------------------------------------------------------------------- */
-/* COUNTRY                                                                    */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// CARD CONSTANTS
+// ======================================================
+
+export const IDENTITY_CARD_VALIDITY_DAYS = 365;
+
+export const IDENTITY_CARD_RENEWAL_COST =
+  IDENTITY_CARD_RENEWAL_XP;
+
+// ======================================================
+// COUNTRY
+// ======================================================
 
 export interface CountryInfo {
   code: string;
@@ -80,389 +53,91 @@ export interface CountryInfo {
 }
 
 /**
- * Global country information.
+ * Convert an ISO alpha-2 country code into its flag emoji.
  *
- * The list contains commonly used countries and can
- * be extended without changing the Identity Card logic.
+ * This means we do not need to maintain a huge
+ * hardcoded list of flags.
  */
-export const COUNTRIES: Record<
-  string,
-  CountryInfo
-> = {
-  IQ: {
-    code: "IQ",
-    name: "Iraq",
-    flag: "🇮🇶",
-    mapCode: "iq",
-  },
+export function getCountryFlag(
+  countryCode: string,
+): string {
+  const normalized =
+    countryCode
+      .trim()
+      .toUpperCase();
 
-  US: {
-    code: "US",
-    name: "United States",
-    flag: "🇺🇸",
-    mapCode: "us",
-  },
+  if (!/^[A-Z]{2}$/.test(normalized)) {
+    return "🌍";
+  }
 
-  GB: {
-    code: "GB",
-    name: "United Kingdom",
-    flag: "🇬🇧",
-    mapCode: "gb",
-  },
+  return normalized
+    .split("")
+    .map(
+      (letter) =>
+        String.fromCodePoint(
+          127397 +
+            letter.charCodeAt(0),
+        ),
+    )
+    .join("");
+}
 
-  CA: {
-    code: "CA",
-    name: "Canada",
-    flag: "🇨🇦",
-    mapCode: "ca",
-  },
-
-  AU: {
-    code: "AU",
-    name: "Australia",
-    flag: "🇦🇺",
-    mapCode: "au",
-  },
-
-  NZ: {
-    code: "NZ",
-    name: "New Zealand",
-    flag: "🇳🇿",
-    mapCode: "nz",
-  },
-
-  DE: {
-    code: "DE",
-    name: "Germany",
-    flag: "🇩🇪",
-    mapCode: "de",
-  },
-
-  FR: {
-    code: "FR",
-    name: "France",
-    flag: "🇫🇷",
-    mapCode: "fr",
-  },
-
-  IT: {
-    code: "IT",
-    name: "Italy",
-    flag: "🇮🇹",
-    mapCode: "it",
-  },
-
-  ES: {
-    code: "ES",
-    name: "Spain",
-    flag: "🇪🇸",
-    mapCode: "es",
-  },
-
-  PT: {
-    code: "PT",
-    name: "Portugal",
-    flag: "🇵🇹",
-    mapCode: "pt",
-  },
-
-  NL: {
-    code: "NL",
-    name: "Netherlands",
-    flag: "🇳🇱",
-    mapCode: "nl",
-  },
-
-  BE: {
-    code: "BE",
-    name: "Belgium",
-    flag: "🇧🇪",
-    mapCode: "be",
-  },
-
-  CH: {
-    code: "CH",
-    name: "Switzerland",
-    flag: "🇨🇭",
-    mapCode: "ch",
-  },
-
-  AT: {
-    code: "AT",
-    name: "Austria",
-    flag: "🇦🇹",
-    mapCode: "at",
-  },
-
-  SE: {
-    code: "SE",
-    name: "Sweden",
-    flag: "🇸🇪",
-    mapCode: "se",
-  },
-
-  NO: {
-    code: "NO",
-    name: "Norway",
-    flag: "🇳🇴",
-    mapCode: "no",
-  },
-
-  DK: {
-    code: "DK",
-    name: "Denmark",
-    flag: "🇩🇰",
-    mapCode: "dk",
-  },
-
-  FI: {
-    code: "FI",
-    name: "Finland",
-    flag: "🇫🇮",
-    mapCode: "fi",
-  },
-
-  IE: {
-    code: "IE",
-    name: "Ireland",
-    flag: "🇮🇪",
-    mapCode: "ie",
-  },
-
-  PL: {
-    code: "PL",
-    name: "Poland",
-    flag: "🇵🇱",
-    mapCode: "pl",
-  },
-
-  CZ: {
-    code: "CZ",
-    name: "Czechia",
-    flag: "🇨🇿",
-    mapCode: "cz",
-  },
-
-  GR: {
-    code: "GR",
-    name: "Greece",
-    flag: "🇬🇷",
-    mapCode: "gr",
-  },
-
-  TR: {
-    code: "TR",
-    name: "Türkiye",
-    flag: "🇹🇷",
-    mapCode: "tr",
-  },
-
-  SA: {
-    code: "SA",
-    name: "Saudi Arabia",
-    flag: "🇸🇦",
-    mapCode: "sa",
-  },
-
-  AE: {
-    code: "AE",
-    name: "United Arab Emirates",
-    flag: "🇦🇪",
-    mapCode: "ae",
-  },
-
-  QA: {
-    code: "QA",
-    name: "Qatar",
-    flag: "🇶🇦",
-    mapCode: "qa",
-  },
-
-  KW: {
-    code: "KW",
-    name: "Kuwait",
-    flag: "🇰🇼",
-    mapCode: "kw",
-  },
-
-  JO: {
-    code: "JO",
-    name: "Jordan",
-    flag: "🇯🇴",
-    mapCode: "jo",
-  },
-
-  EG: {
-    code: "EG",
-    name: "Egypt",
-    flag: "🇪🇬",
-    mapCode: "eg",
-  },
-
-  MA: {
-    code: "MA",
-    name: "Morocco",
-    flag: "🇲🇦",
-    mapCode: "ma",
-  },
-
-  TN: {
-    code: "TN",
-    name: "Tunisia",
-    flag: "🇹🇳",
-    mapCode: "tn",
-  },
-
-  DZ: {
-    code: "DZ",
-    name: "Algeria",
-    flag: "🇩🇿",
-    mapCode: "dz",
-  },
-
-  IN: {
-    code: "IN",
-    name: "India",
-    flag: "🇮🇳",
-    mapCode: "in",
-  },
-
-  PK: {
-    code: "PK",
-    name: "Pakistan",
-    flag: "🇵🇰",
-    mapCode: "pk",
-  },
-
-  BD: {
-    code: "BD",
-    name: "Bangladesh",
-    flag: "🇧🇩",
-    mapCode: "bd",
-  },
-
-  CN: {
-    code: "CN",
-    name: "China",
-    flag: "🇨🇳",
-    mapCode: "cn",
-  },
-
-  JP: {
-    code: "JP",
-    name: "Japan",
-    flag: "🇯🇵",
-    mapCode: "jp",
-  },
-
-  KR: {
-    code: "KR",
-    name: "South Korea",
-    flag: "🇰🇷",
-    mapCode: "kr",
-  },
-
-  ID: {
-    code: "ID",
-    name: "Indonesia",
-    flag: "🇮🇩",
-    mapCode: "id",
-  },
-
-  MY: {
-    code: "MY",
-    name: "Malaysia",
-    flag: "🇲🇾",
-    mapCode: "my",
-  },
-
-  SG: {
-    code: "SG",
-    name: "Singapore",
-    flag: "🇸🇬",
-    mapCode: "sg",
-  },
-
-  TH: {
-    code: "TH",
-    name: "Thailand",
-    flag: "🇹🇭",
-    mapCode: "th",
-  },
-
-  VN: {
-    code: "VN",
-    name: "Vietnam",
-    flag: "🇻🇳",
-    mapCode: "vn",
-  },
-
-  PH: {
-    code: "PH",
-    name: "Philippines",
-    flag: "🇵🇭",
-    mapCode: "ph",
-  },
-
-  BR: {
-    code: "BR",
-    name: "Brazil",
-    flag: "🇧🇷",
-    mapCode: "br",
-  },
-
-  AR: {
-    code: "AR",
-    name: "Argentina",
-    flag: "🇦🇷",
-    mapCode: "ar",
-  },
-
-  MX: {
-    code: "MX",
-    name: "Mexico",
-    flag: "🇲🇽",
-    mapCode: "mx",
-  },
-
-  ZA: {
-    code: "ZA",
-    name: "South Africa",
-    flag: "🇿🇦",
-    mapCode: "za",
-  },
-
-  NG: {
-    code: "NG",
-    name: "Nigeria",
-    flag: "🇳🇬",
-    mapCode: "ng",
-  },
-
-  KE: {
-    code: "KE",
-    name: "Kenya",
-    flag: "🇰🇪",
-    mapCode: "ke",
-  },
-
-  RU: {
-    code: "RU",
-    name: "Russia",
-    flag: "🇷🇺",
-    mapCode: "ru",
-  },
-};
-
-/* -------------------------------------------------------------------------- */
-/* COUNTRY HELPERS                                                            */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// COUNTRY NAME
+// ======================================================
 
 /**
- * Return country information using an ISO 3166-1
- * alpha-2 country code.
+ * Get the localized English country name using
+ * the browser's built-in Intl API.
  *
- * Unknown countries receive a safe fallback.
+ * This supports ISO country codes without requiring
+ * a hardcoded country-name database.
+ */
+export function getCountryName(
+  countryCode: string,
+  locale = "en",
+): string {
+  const normalized =
+    countryCode
+      .trim()
+      .toUpperCase();
+
+  if (!/^[A-Z]{2}$/.test(normalized)) {
+    return "International";
+  }
+
+  try {
+    const DisplayNames =
+      Intl.DisplayNames;
+
+    const displayNames =
+      new DisplayNames(
+        [locale],
+        {
+          type: "region",
+        },
+      );
+
+    return (
+      displayNames.of(normalized) ??
+      "International"
+    );
+  } catch {
+    return "International";
+  }
+}
+
+// ======================================================
+// COUNTRY INFO
+// ======================================================
+
+/**
+ * Return all country information required by
+ * the Identity Card.
+ *
+ * mapCode is intentionally the ISO alpha-2 code.
+ * The actual transparent country-map asset will be
+ * connected by the final UI/assets layer.
  */
 export function getCountryInfo(
   countryCode: string,
@@ -472,43 +147,37 @@ export function getCountryInfo(
       .trim()
       .toUpperCase();
 
-  return (
-    COUNTRIES[normalized] ?? {
-      code: normalized || "UN",
+  if (!/^[A-Z]{2}$/.test(normalized)) {
+    return {
+      code: "UN",
       name: "International",
       flag: "🌍",
-      mapCode:
-        normalized.toLowerCase() ||
-        "world",
-    }
-  );
+      mapCode: "world",
+    };
+  }
+
+  return {
+    code: normalized,
+
+    name:
+      getCountryName(
+        normalized,
+      ),
+
+    flag:
+      getCountryFlag(
+        normalized,
+      ),
+
+    mapCode:
+      normalized.toLowerCase(),
+  };
 }
 
-/**
- * Get the flag for a country.
- */
-export function getCountryFlag(
-  countryCode: string,
-): string {
-  return getCountryInfo(
-    countryCode,
-  ).flag;
-}
+// ======================================================
+// COUNTRY HELPERS
+// ======================================================
 
-/**
- * Get the country name.
- */
-export function getCountryName(
-  countryCode: string,
-): string {
-  return getCountryInfo(
-    countryCode,
-  ).name;
-}
-
-/**
- * Get the map identifier used by the UI.
- */
 export function getCountryMapCode(
   countryCode: string,
 ): string {
@@ -517,18 +186,16 @@ export function getCountryMapCode(
   ).mapCode;
 }
 
-/* -------------------------------------------------------------------------- */
-/* DATE HELPERS                                                               */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// DATE HELPERS
+// ======================================================
 
-/**
- * Add days to a date.
- */
 export function addDays(
   date: Date,
   days: number,
 ): Date {
-  const result = new Date(date);
+  const result =
+    new Date(date);
 
   result.setDate(
     result.getDate() + days,
@@ -537,18 +204,16 @@ export function addDays(
   return result;
 }
 
-/**
- * Convert a Date to ISO format.
- */
 export function toIsoDate(
   date: Date,
 ): string {
   return date.toISOString();
 }
 
-/**
- * Create a new Identity Card validity period.
- */
+// ======================================================
+// CREATE CARD DATES
+// ======================================================
+
 export function createIdentityCardDates(
   issueDate = new Date(),
 ): IdentityCard {
@@ -570,23 +235,13 @@ export function createIdentityCardDates(
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* CARD CONSTANTS                                                             */
-/* -------------------------------------------------------------------------- */
-
-export const IDENTITY_CARD_VALIDITY_DAYS =
-  365;
-
-export const IDENTITY_CARD_RENEWAL_COST =
-  IDENTITY_CARD_RENEWAL_XP;
-
-/* -------------------------------------------------------------------------- */
-/* CARD ISSUANCE                                                              */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// CARD ISSUANCE
+// ======================================================
 
 /**
- * A card can be issued only after the Level Test
- * has been completed.
+ * A DRE2learn Identity Card can only be issued
+ * after the user completes the Level Test.
  */
 export function canIssueIdentityCard(
   user: UserProfile | null,
@@ -600,15 +255,18 @@ export function canIssueIdentityCard(
   );
 }
 
-/**
- * Issue a new Identity Card.
- */
+// ======================================================
+// ISSUE CARD
+// ======================================================
+
 export function issueIdentityCard(
   user: UserProfile,
   issueDate = new Date(),
 ): UserProfile | null {
   if (
-    !canIssueIdentityCard(user)
+    !canIssueIdentityCard(
+      user,
+    )
   ) {
     return null;
   }
@@ -623,9 +281,10 @@ export function issueIdentityCard(
   };
 }
 
-/**
- * Check whether the user has an Identity Card.
- */
+// ======================================================
+// CARD EXISTENCE
+// ======================================================
+
 export function hasIdentityCard(
   user: UserProfile | null,
 ): boolean {
@@ -634,18 +293,15 @@ export function hasIdentityCard(
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* CARD STATUS                                                                */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// CARD STATUS
+// ======================================================
 
 export type IdentityCardStatus =
   | "not-issued"
   | "active"
   | "expired";
 
-/**
- * Get the current status of the card.
- */
 export function getIdentityCardStatus(
   user: UserProfile | null,
   now = new Date(),
@@ -677,9 +333,10 @@ export function getIdentityCardStatus(
   return "active";
 }
 
-/**
- * Check whether the card is active.
- */
+// ======================================================
+// ACTIVE / EXPIRED
+// ======================================================
+
 export function isIdentityCardActive(
   user: UserProfile | null,
   now = new Date(),
@@ -692,9 +349,6 @@ export function isIdentityCardActive(
   );
 }
 
-/**
- * Check whether the card is expired.
- */
 export function isIdentityCardExpired(
   user: UserProfile | null,
   now = new Date(),
@@ -707,13 +361,10 @@ export function isIdentityCardExpired(
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* REMAINING VALIDITY                                                         */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// REMAINING DAYS
+// ======================================================
 
-/**
- * Calculate remaining days.
- */
 export function getRemainingDays(
   expiresAt: Date,
   now = new Date(),
@@ -732,9 +383,6 @@ export function getRemainingDays(
   );
 }
 
-/**
- * Get remaining days for the user's card.
- */
 export function getIdentityCardRemainingDays(
   user: UserProfile | null,
   now = new Date(),
@@ -762,14 +410,10 @@ export function getIdentityCardRemainingDays(
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* RENEWAL                                                                    */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// RENEWAL
+// ======================================================
 
-/**
- * Check whether the user has enough XP
- * for renewal.
- */
 export function canAffordIdentityCardRenewal(
   user: UserProfile | null,
 ): boolean {
@@ -782,9 +426,6 @@ export function canAffordIdentityCardRenewal(
   );
 }
 
-/**
- * Check whether an expired card can be renewed.
- */
 export function canRenewIdentityCardNow(
   user: UserProfile | null,
   now = new Date(),
@@ -807,9 +448,10 @@ export function canRenewIdentityCardNow(
   );
 }
 
-/**
- * Renew the Identity Card.
- */
+// ======================================================
+// RENEW CARD
+// ======================================================
+
 export function renewIdentityCard(
   user: UserProfile,
   renewalDate = new Date(),
@@ -829,7 +471,9 @@ export function renewIdentityCard(
       IDENTITY_CARD_RENEWAL_COST,
     );
 
-  if (remainingXp === null) {
+  if (
+    remainingXp === null
+  ) {
     return null;
   }
 
@@ -845,9 +489,9 @@ export function renewIdentityCard(
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* DISPLAY DATA                                                               */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// DISPLAY DATA
+// ======================================================
 
 export interface IdentityCardDisplayData {
   name: string;
@@ -881,12 +525,12 @@ export interface IdentityCardDisplayData {
   backgroundColor: string;
 }
 
-/**
- * Prepare all data required by the final Identity Card UI.
- */
+// ======================================================
+// GET DISPLAY DATA
+// ======================================================
+
 export function getIdentityCardDisplayData(
   user: UserProfile,
-  countryCode: string,
   now = new Date(),
 ): IdentityCardDisplayData | null {
   if (!user.identityCard) {
@@ -895,7 +539,7 @@ export function getIdentityCardDisplayData(
 
   const country =
     getCountryInfo(
-      countryCode,
+      user.countryCode,
     );
 
   const status =
@@ -959,13 +603,10 @@ export function getIdentityCardDisplayData(
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* DATE DISPLAY                                                               */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// DATE DISPLAY
+// ======================================================
 
-/**
- * Format an Identity Card date.
- */
 export function formatIdentityCardDate(
   isoDate: string,
   locale = "en-US",
@@ -991,9 +632,9 @@ export function formatIdentityCardDate(
   ).format(date);
 }
 
-/* -------------------------------------------------------------------------- */
-/* STATUS LABEL                                                               */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// STATUS LABEL
+// ======================================================
 
 export function getIdentityCardStatusLabel(
   status: IdentityCardStatus,
@@ -1013,13 +654,10 @@ export function getIdentityCardStatusLabel(
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* FINAL CARD FIELDS                                                          */
-/* -------------------------------------------------------------------------- */
+// ======================================================
+// EXACT CARD FIELDS
+// ======================================================
 
-/**
- * Exact information displayed on the global Identity Card.
- */
 export const IDENTITY_CARD_FIELDS = [
   "name",
   "xp",
@@ -1030,9 +668,10 @@ export const IDENTITY_CARD_FIELDS = [
   "expiresAt",
 ] as const;
 
-/**
- * Visual elements used by the final UI.
- */
+// ======================================================
+// CARD VISUALS
+// ======================================================
+
 export const IDENTITY_CARD_VISUALS = {
   logo: "DRE2learn",
 
