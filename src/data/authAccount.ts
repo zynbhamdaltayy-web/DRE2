@@ -34,3 +34,4 @@ export function createAccountFromFirebaseUser(
 export function getStoredAccount() {
   return getCurrentAccount();
 }
+
