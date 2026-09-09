@@ -4,6 +4,7 @@ export type Page =
   | "signup"
   | "login"
   | "avatar"
+  | "levelTest"
   | "home"
   | "library"
   | "article"
@@ -16,9 +17,27 @@ export type Page =
   | "settings"
   | "updates";
 
-export type Level = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
-export type AvatarGender = "girl" | "boy";
+// ======================================================
+// CEFR LEVELS
+// ======================================================
+
+export type Level =
+  | "A1"
+  | "A2"
+  | "B1"
+  | "B2"
+  | "C1"
+  | "C2";
+
+
+// ======================================================
+// AVATAR
+// ======================================================
+
+export type AvatarGender =
+  | "girl"
+  | "boy";
 
 export type SkinTone =
   | "light"
@@ -69,14 +88,10 @@ export interface Avatar {
   hijab: boolean;
 }
 
-export interface VocabularyWord {
-  id: string;
-  word: string;
-  meaning: string;
-  example: string;
-  articleId: string;
-  savedAt: string;
-}
+
+// ======================================================
+// LIBRARY / ARTICLES
+// ======================================================
 
 export interface Article {
   id: string;
@@ -86,46 +101,280 @@ export interface Article {
   description: string;
   content: string;
   estimatedMinutes: number;
+
+  vocabulary?: ArticleVocabulary[];
+  comprehensionQuestions?: ComprehensionQuestion[];
+
+  audioSrc?: string;
+
+  publishedAt?: string;
 }
+
+export interface ArticleVocabulary {
+  word: string;
+  meaning: string;
+  example: string;
+}
+
+export interface ComprehensionQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+}
+
+
+// ======================================================
+// VOCABULARY
+// ======================================================
+
+export interface VocabularyWord {
+  id: string;
+  word: string;
+  meaning: string;
+  example: string;
+
+  articleId: string;
+
+  savedAt: string;
+}
+
+
+// ======================================================
+// PRACTICE
+// ======================================================
 
 export interface PracticeQuestion {
   id: string;
   level: Level;
+
   question: string;
+
   options: string[];
+
   correctAnswer: string;
+
   explanation: string;
 }
 
-/* =========================
-   LEVEL TEST
-========================= */
+
+// ======================================================
+// LEVEL TEST
+// ======================================================
+
+export type LevelTestSkill =
+  | "reading"
+  | "listening"
+  | "writing"
+  | "grammar";
+
+export type LevelTestQuestionType =
+  | "multiple-choice"
+  | "writing";
 
 export interface LevelTestQuestion {
   id: string;
+
+  level: Level;
+
+  skill: LevelTestSkill;
+
+  type: LevelTestQuestionType;
+
   question: string;
-  options: string[];
-  correctAnswer: string;
+
+  passage?: string;
+
+  audioSrc?: string;
+
+  options?: string[];
+
+  correctAnswer?: string;
+
+  writingPrompt?: string;
+
+  points: number;
+}
+
+
+// ======================================================
+// LEVEL TEST ANSWER
+// ======================================================
+
+export interface LevelTestAnswer {
+  questionId: string;
+
+  answer: string;
+
+  isCorrect?: boolean;
+
+  pointsEarned?: number;
+}
+
+
+// ======================================================
+// LEVEL TEST RESULT
+// ======================================================
+
+export interface LevelTestSkillResult {
+  skill: LevelTestSkill;
+
+  score: number;
+
+  total: number;
+
+  percentage: number;
+
   level: Level;
 }
 
-/* =========================
-   IDENTITY CARD
-========================= */
+export interface LevelTestResult {
+  score: number;
+
+  total: number;
+
+  percentage: number;
+
+  level: Level;
+
+  reading: LevelTestSkillResult;
+
+  listening: LevelTestSkillResult;
+
+  writing: LevelTestSkillResult;
+
+  grammar: LevelTestSkillResult;
+
+  completedAt: string;
+}
+
+
+// ======================================================
+// XP
+// ======================================================
+
+export interface XpReward {
+  action:
+    | "article"
+    | "vocabulary"
+    | "practice"
+    | "room"
+    | "card"
+    | "levelTest"
+    | "daily";
+
+  amount: number;
+
+  description: string;
+}
+
+
+// ======================================================
+// CARDS GAME
+// ======================================================
+
+export type CardDifficulty =
+  | "easy"
+  | "medium"
+  | "hard";
+
+export interface LearningCard {
+  id: string;
+
+  word: string;
+
+  meaning: string;
+
+  example: string;
+
+  level: Level;
+
+  topic: string;
+
+  difficulty: CardDifficulty;
+
+  xpCost: number;
+
+  xpReward: number;
+}
+
+export interface CollectedCard {
+  cardId: string;
+
+  collectedAt: string;
+
+  timesPlayed: number;
+}
+
+
+// ======================================================
+// ROOMS
+// ======================================================
+
+export type RoomGender =
+  | "girls"
+  | "boys"
+  | "mixed";
+
+export type RoomType =
+  | "audio"
+  | "video";
+
+export interface RoomSettings {
+  topic: string;
+
+  level: Level;
+
+  gender: RoomGender;
+
+  type: RoomType;
+
+  maxParticipants: number;
+
+  allowPrivateMessages: boolean;
+}
+
+export interface LearningRoom {
+  id: string;
+
+  name: string;
+
+  hostId: string;
+
+  settings: RoomSettings;
+
+  participants: string[];
+
+  createdAt: string;
+
+  isActive: boolean;
+}
+
+
+// ======================================================
+// IDENTITY CARD / الموحدة
+// ======================================================
 
 export interface IdentityCard {
   issuedAt: string;
+
   expiresAt: string;
+
+  renewalXpCost?: number;
 }
 
-/* =========================
-   USER PROFILE
-========================= */
+
+// ======================================================
+// USER PROFILE
+// ======================================================
 
 export interface UserProfile {
   name: string;
+
   email: string;
+
   level: Level;
+
   avatar: Avatar;
 
   xp: number;
@@ -133,11 +382,85 @@ export interface UserProfile {
   identityCard: IdentityCard | null;
 
   levelTestCompleted: boolean;
+
+  levelTestResult?: LevelTestResult | null;
 }
 
-/* =========================
-   APP STATE
-========================= */
+
+// ======================================================
+// SETTINGS
+// ======================================================
+
+export interface AppSettings {
+  notifications: boolean;
+
+  soundEffects: boolean;
+
+  autoplayAudio: boolean;
+
+  privateMessages: boolean;
+
+  showOnlineStatus: boolean;
+
+  preferredTheme: "light" | "system" | "dark";
+
+  preferredLanguage: "en" | "ar";
+}
+
+
+// ======================================================
+// UPDATES
+// ======================================================
+
+export type UpdateType =
+  | "feature"
+  | "improvement"
+  | "fix"
+  | "announcement";
+
+export interface AppUpdate {
+  id: string;
+
+  title: string;
+
+  description: string;
+
+  type: UpdateType;
+
+  version: string;
+
+  date: string;
+
+  isNew: boolean;
+}
+
+
+// ======================================================
+// PROGRESS
+// ======================================================
+
+export interface ProgressStats {
+  articlesRead: number;
+
+  vocabularyLearned: number;
+
+  practiceCompleted: number;
+
+  roomsJoined: number;
+
+  cardsCollected: number;
+
+  totalXp: number;
+
+  levelTestScore: number;
+
+  levelTestTotal: number;
+}
+
+
+// ======================================================
+// APPLICATION STATE
+// ======================================================
 
 export interface AppState {
   page: Page;
@@ -162,9 +485,17 @@ export interface AppState {
 
   isAuthenticated: boolean;
 
-  /* Progress */
+
+  // ----------------------------------------------------
+  // XP
+  // ----------------------------------------------------
 
   totalXp: number;
+
+
+  // ----------------------------------------------------
+  // Progress
+  // ----------------------------------------------------
 
   articlesRead: number;
 
@@ -176,9 +507,44 @@ export interface AppState {
 
   cardsCollected: number;
 
-  /* Level Test */
+
+  // ----------------------------------------------------
+  // Level Test
+  // ----------------------------------------------------
 
   levelTestScore: number;
 
   levelTestTotal: number;
+
+  levelTestAnswers?: LevelTestAnswer[];
+
+  levelTestResult?: LevelTestResult | null;
+
+
+  // ----------------------------------------------------
+  // Cards
+  // ----------------------------------------------------
+
+  collectedCards?: CollectedCard[];
+
+
+  // ----------------------------------------------------
+  // Rooms
+  // ----------------------------------------------------
+
+  joinedRoomId?: string | null;
+
+
+  // ----------------------------------------------------
+  // Settings
+  // ----------------------------------------------------
+
+  settings?: AppSettings;
+
+
+  // ----------------------------------------------------
+  // Updates
+  // ----------------------------------------------------
+
+  seenUpdates?: string[];
 }
