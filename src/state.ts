@@ -36,6 +36,30 @@ export const initialState: AppState = {
   selectedPracticeLevel: "A1",
 
   isAuthenticated: false,
+
+  /* =========================
+     PROGRESS
+  ========================= */
+
+  totalXp: 0,
+
+  articlesRead: 0,
+
+  vocabularyLearned: 0,
+
+  practiceCompleted: 0,
+
+  roomsJoined: 0,
+
+  cardsCollected: 0,
+
+  /* =========================
+     LEVEL TEST
+  ========================= */
+
+  levelTestScore: 0,
+
+  levelTestTotal: 0,
 };
 
 export function createDefaultAvatar(): Avatar {
@@ -70,9 +94,7 @@ export function normalizeLevel(
     "C2",
   ];
 
-  if (
-    levels.includes(value as Level)
-  ) {
+  if (levels.includes(value as Level)) {
     return value as Level;
   }
 
