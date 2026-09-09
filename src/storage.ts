@@ -1,12 +1,35 @@
 import type { AppState } from "./types";
+import { updateStreak } from "./data/progress";
 
 const STORAGE_KEY = "dre2learn_state";
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 
 interface StoredData {
   version: number;
   state: AppState;
 }
+
+interface ProgressStorageData {
+  currentStreak?: number;
+  longestStreak?: number;
+  lastActiveDate?: string;
+  dailyXp?: number;
+  dailyGoal?: number;
+}
+
+/* ======================================================
+   DATE
+====================================================== */
+
+function getTodayDate(): string {
+  return new Date()
+    .toISOString()
+    .slice(0, 10);
+}
+
+/* ======================================================
+   SAFE STATE
+====================================================== */
 
 function createSafeState(
   state: Partial<AppState>,
@@ -38,6 +61,11 @@ function createSafeState(
           state.user.levelTestResult ?? null,
       }
     : null;
+
+  const savedProgress =
+    state.progress as
+      | ProgressStorageData
+      | undefined;
 
   return {
     page:
@@ -182,20 +210,158 @@ function createSafeState(
       Array.isArray(state.seenUpdates)
         ? state.seenUpdates
         : [],
+
+    // ==================================================
+    // STREAK / DAILY PROGRESS
+    // ==================================================
+
+    progress: {
+      currentStreak:
+        typeof savedProgress?.currentStreak === "number"
+          ? Math.max(
+              0,
+              Math.floor(
+                savedProgress.currentStreak,
+              ),
+            )
+          : 0,
+
+      longestStreak:
+        typeof savedProgress?.longestStreak === "number"
+          ? Math.max(
+              0,
+              Math.floor(
+                savedProgress.longestStreak,
+              ),
+            )
+          : 0,
+
+      lastActiveDate:
+        typeof savedProgress?.lastActiveDate === "string"
+          ? savedProgress.lastActiveDate
+              .slice(0, 10)
+          : "",
+
+      dailyXp:
+        typeof savedProgress?.dailyXp === "number"
+          ? Math.max(
+              0,
+              Math.floor(
+                savedProgress.dailyXp,
+              ),
+            )
+          : 0,
+
+      dailyGoal:
+        typeof savedProgress?.dailyGoal === "number"
+          ? Math.max(
+              1,
+              Math.floor(
+                savedProgress.dailyGoal,
+              ),
+            )
+          : 20,
+    },
   };
 }
 
-// ======================================================
-// SAVE
-// ======================================================
+/* ======================================================
+   STREAK + DAILY XP
+====================================================== */
+
+/**
+ * Registers learning activity for today.
+ *
+ * This function:
+ * - updates current streak
+ * - updates longest streak
+ * - saves today's date
+ * - adds XP to today's daily progress
+ * - never counts the same activity twice through this helper
+ */
+function registerLearningActivity(
+  state: AppState,
+  xpAmount: number,
+): AppState {
+  const today = getTodayDate();
+
+  const currentProgress =
+    (state.progress ?? {}) as
+      | ProgressStorageData;
+
+  const streak =
+    updateStreak(
+      state,
+      today,
+    );
+
+  const previousDate =
+    typeof currentProgress.lastActiveDate ===
+    "string"
+      ? currentProgress.lastActiveDate
+          .slice(0, 10)
+      : "";
+
+  /*
+    If the previous activity was not today,
+    today's Daily XP starts from zero.
+  */
+  const previousDailyXp =
+    previousDate === today
+      ? typeof currentProgress.dailyXp ===
+        "number"
+        ? Math.max(
+            0,
+            currentProgress.dailyXp,
+          )
+        : 0
+      : 0;
+
+  const newDailyXp =
+    previousDailyXp +
+    Math.max(0, xpAmount);
+
+  return {
+    ...state,
+
+    progress: {
+      ...currentProgress,
+
+      currentStreak:
+        streak.currentStreak,
+
+      longestStreak:
+        streak.longestStreak,
+
+      lastActiveDate:
+        streak.lastActiveDate,
+
+      dailyXp:
+        newDailyXp,
+
+      dailyGoal:
+        typeof currentProgress.dailyGoal ===
+        "number"
+          ? currentProgress.dailyGoal
+          : 20,
+    },
+  };
+}
+
+/* ======================================================
+   SAVE
+====================================================== */
 
 export function saveState(
   state: AppState,
 ): void {
   try {
+    const safeState =
+      createSafeState(state);
+
     const data: StoredData = {
       version: STORAGE_VERSION,
-      state,
+      state: safeState,
     };
 
     localStorage.setItem(
@@ -210,14 +376,16 @@ export function saveState(
   }
 }
 
-// ======================================================
-// LOAD
-// ======================================================
+/* ======================================================
+   LOAD
+====================================================== */
 
 export function loadStoredState(): AppState | null {
   try {
     const stored =
-      localStorage.getItem(STORAGE_KEY);
+      localStorage.getItem(
+        STORAGE_KEY,
+      );
 
     if (!stored) {
       return null;
@@ -269,9 +437,9 @@ export function loadStoredState(): AppState | null {
   }
 }
 
-// ======================================================
-// CLEAR
-// ======================================================
+/* ======================================================
+   CLEAR
+====================================================== */
 
 export function clearStoredState(): void {
   try {
@@ -286,9 +454,9 @@ export function clearStoredState(): void {
   }
 }
 
-// ======================================================
-// XP
-// ======================================================
+/* ======================================================
+   XP
+====================================================== */
 
 export function addXP(
   state: AppState,
@@ -307,24 +475,37 @@ export function addXP(
   const newTotalXp =
     state.totalXp + amount;
 
-  return {
+  const updatedState: AppState = {
     ...state,
 
-    totalXp: newTotalXp,
+    totalXp:
+      newTotalXp,
 
-    user: state.user
-      ? {
-          ...state.user,
-          xp:
-            currentUserXp + amount,
-        }
-      : null,
+    user:
+      state.user
+        ? {
+            ...state.user,
+
+            xp:
+              currentUserXp +
+              amount,
+          }
+        : null,
   };
+
+  /*
+    Every XP-earning learning action
+    counts as activity for the streak.
+  */
+  return registerLearningActivity(
+    updatedState,
+    amount,
+  );
 }
 
-// ======================================================
-// ARTICLES
-// ======================================================
+/* ======================================================
+   ARTICLES
+====================================================== */
 
 export function markArticleCompleted(
   state: AppState,
@@ -356,9 +537,9 @@ export function markArticleCompleted(
   );
 }
 
-// ======================================================
-// VOCABULARY
-// ======================================================
+/* ======================================================
+   VOCABULARY
+====================================================== */
 
 export function addVocabularyWord(
   state: AppState,
@@ -376,9 +557,9 @@ export function addVocabularyWord(
   );
 }
 
-// ======================================================
-// PRACTICE
-// ======================================================
+/* ======================================================
+   PRACTICE
+====================================================== */
 
 export function markPracticeCompleted(
   state: AppState,
@@ -396,9 +577,9 @@ export function markPracticeCompleted(
   );
 }
 
-// ======================================================
-// ROOMS
-// ======================================================
+/* ======================================================
+   ROOMS
+====================================================== */
 
 export function markRoomJoined(
   state: AppState,
@@ -416,9 +597,9 @@ export function markRoomJoined(
   );
 }
 
-// ======================================================
-// CARDS
-// ======================================================
+/* ======================================================
+   CARDS
+====================================================== */
 
 export function addCollectedCard(
   state: AppState,
@@ -435,3 +616,5 @@ export function addCollectedCard(
     3,
   );
 }
+
+  
