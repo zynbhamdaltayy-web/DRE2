@@ -193,12 +193,42 @@ function createSafeState(
     // ==================================================
 
     settings: state.settings ?? {
-      notifications: true,
+      theme: "system",
+
+      language: "en",
+
+      notifications: {
+        pushNotifications: true,
+        messageNotifications: true,
+        followNotifications: true,
+        learningNotifications: true,
+        officialUpdates: true,
+      },
+
+      privacy: {
+        profileVisible: true,
+        showOnlineStatus: true,
+        allowMessageRequests: true,
+        allowRoomInvites: true,
+      },
+
+      learning: {
+        dailyGoal: 20,
+        defaultLevel: "A1",
+        defaultLanguage: "en",
+        autoplayAudio: true,
+      },
+
       soundEffects: true,
+
       autoplayAudio: true,
+
       privateMessages: true,
+
       showOnlineStatus: true,
+
       preferredTheme: "system",
+
       preferredLanguage: "en",
     },
 
@@ -616,5 +646,3 @@ export function addCollectedCard(
     3,
   );
 }
-
-  
