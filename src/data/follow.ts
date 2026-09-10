@@ -1,8 +1,4 @@
-import {
-  DRE2LEARN_OWNER_ID,
-  isOfficialAccount,
-  type Account,
-} from "./accounts";
+import type { Account } from "./accounts";
 
 export interface Follow {
   id: string;
@@ -11,10 +7,12 @@ export interface Follow {
   createdAt: string;
 }
 
-export interface FollowStats {
-  followers: number;
-  following: number;
+export interface FollowInput {
+  followerId: string;
+  followingId: string;
 }
+
+export const DRE2LEARN_OFFICIAL_USERNAME = "DRE2learn";
 
 function createId(): string {
   return `follow-${Date.now()}-${Math.random()
@@ -22,8 +20,35 @@ function createId(): string {
     .slice(2, 10)}`;
 }
 
-function nowIso(): string {
-  return new Date().toISOString();
+function cleanString(value: unknown): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
+}
+
+export function createFollow(
+  input: FollowInput,
+): Follow {
+  return {
+    id: createId(),
+    followerId: cleanString(input.followerId),
+    followingId: cleanString(input.followingId),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export function normalizeFollow(
+  follow: Follow,
+): Follow {
+  return {
+    ...follow,
+    id: cleanString(follow.id) || createId(),
+    followerId: cleanString(follow.followerId),
+    followingId: cleanString(follow.followingId),
+    createdAt:
+      cleanString(follow.createdAt) ||
+      new Date().toISOString(),
+  };
 }
 
 export function isFollowing(
@@ -42,116 +67,47 @@ export function canFollow(
   followerId: string,
   followingId: string,
 ): boolean {
-  if (!followerId || !followingId) {
-    return false;
-  }
+  const follower = cleanString(followerId);
+  const following = cleanString(followingId);
 
-  if (followerId === followingId) {
-    return false;
-  }
+  return Boolean(
+    follower &&
+      following &&
+      follower !== following,
+  );
+}
 
-  return true;
+export function isOfficialFollowTarget(
+  account: Account,
+): boolean {
+  return (
+    account.official &&
+    account.username === DRE2LEARN_OFFICIAL_USERNAME
+  );
 }
 
 export function canUnfollow(
-  followingId: string,
+  account: Account,
 ): boolean {
-  return followingId !== DRE2LEARN_OWNER_ID;
-}
-
-export function followUser(
-  follows: Follow[],
-  followerId: string,
-  followingId: string,
-): Follow[] {
-  if (!canFollow(followerId, followingId)) {
-    return follows;
-  }
-
-  if (isFollowing(follows, followerId, followingId)) {
-    return follows;
-  }
-
-  const follow: Follow = {
-    id: createId(),
-    followerId,
-    followingId,
-    createdAt: nowIso(),
-  };
-
-  return [...follows, follow];
-}
-
-export function unfollowUser(
-  follows: Follow[],
-  followerId: string,
-  followingId: string,
-): Follow[] {
-  if (!canUnfollow(followingId)) {
-    return follows;
-  }
-
-  return follows.filter(
-    (follow) =>
-      !(
-        follow.followerId === followerId &&
-        follow.followingId === followingId
-      ),
-  );
-}
-
-export function forceFollowOfficialAccount(
-  follows: Follow[],
-  userId: string,
-): Follow[] {
-  if (!userId || userId === DRE2LEARN_OWNER_ID) {
-    return follows;
-  }
-
-  return followUser(
-    follows,
-    userId,
-    DRE2LEARN_OWNER_ID,
-  );
-}
-
-export function ensureOfficialFollowForAllUsers(
-  follows: Follow[],
-  accounts: Account[],
-): Follow[] {
-  let result = [...follows];
-
-  for (const account of accounts) {
-    if (
-      account.id !== DRE2LEARN_OWNER_ID &&
-      !isOfficialAccount(account)
-    ) {
-      result = forceFollowOfficialAccount(
-        result,
-        account.id,
-      );
-    }
-  }
-
-  return result;
+  return !isOfficialFollowTarget(account);
 }
 
 export function getFollowers(
   follows: Follow[],
   userId: string,
-): string[] {
-  return follows
-    .filter((follow) => follow.followingId === userId)
-    .map((follow) => follow.followerId);
+): Follow[] {
+  return follows.filter(
+    (follow) => follow.followingId === userId,
+  );
 }
 
 export function getFollowing(
   follows: Follow[],
   userId: string,
-): string[] {
-  return follows
-    .filter((follow) => follow.followerId === userId)
-    .map((follow) => follow.followingId);
+): Follow[] {
+  return follows.filter(
+    (follow) => follow.followerId === userId,
+  );
 }
 
 export function getFollowerCount(
@@ -168,57 +124,68 @@ export function getFollowingCount(
   return getFollowing(follows, userId).length;
 }
 
-export function getFollowStats(
+export function removeFollow(
   follows: Follow[],
-  userId: string,
-): FollowStats {
-  return {
-    followers: getFollowerCount(follows, userId),
-    following: getFollowingCount(follows, userId),
-  };
-}
-
-export function getOfficialFollowers(
-  follows: Follow[],
-): string[] {
-  return getFollowers(
-    follows,
-    DRE2LEARN_OWNER_ID,
+  followerId: string,
+  followingId: string,
+): Follow[] {
+  return follows.filter(
+    (follow) =>
+      !(
+        follow.followerId === followerId &&
+        follow.followingId === followingId
+      ),
   );
 }
 
-export function isOfficialFollow(
-  follow: Follow,
-): boolean {
-  return follow.followingId === DRE2LEARN_OWNER_ID;
-}
-
-export function removeDuplicateFollows(
+export function addFollow(
   follows: Follow[],
+  follow: Follow,
 ): Follow[] {
-  const seen = new Set<string>();
-  const result: Follow[] = [];
-
-  for (const follow of follows) {
-    const key = `${follow.followerId}:${follow.followingId}`;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    result.push(follow);
+  if (
+    isFollowing(
+      follows,
+      follow.followerId,
+      follow.followingId,
+    )
+  ) {
+    return follows;
   }
 
-  return result;
+  return [...follows, normalizeFollow(follow)];
 }
 
-export function normalizeFollow(
-  follow: Follow,
-): Follow {
-  return {
-    ...follow,
-    followerId: follow.followerId.trim(),
-    followingId: follow.followingId.trim(),
-  };
+export function ensureOfficialFollow(
+  follows: Follow[],
+  userId: string,
+  officialAccount: Account,
+): Follow[] {
+  if (!officialAccount.official) {
+    return follows;
+  }
+
+  if (
+    isFollowing(
+      follows,
+      userId,
+      officialAccount.id,
+    )
+  ) {
+    return follows;
+  }
+
+  if (userId === officialAccount.id) {
+    return follows;
+  }
+
+  return addFollow(
+    follows,
+    createFollow({
+      followerId: userId,
+      followingId: officialAccount.id,
+    }),
+  );
 }
+
+  
+        
