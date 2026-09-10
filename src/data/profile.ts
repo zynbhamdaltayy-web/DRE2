@@ -1,192 +1,216 @@
-import type { Account } from "./accounts";
-import {
-  getFollowers,
-  getFollowing,
-  getFollowerCount,
-  getFollowingCount,
-  isOfficialFollow,
-  type Follow,
-} from "./follow";
+import type {
+  Avatar,
+  Level,
+} from "../types";
 
-import type { WriterProfile } from "./writer";
-
-export interface PublicProfile {
+export interface UserProfileData {
   id: string;
   username: string;
   displayName: string;
-  avatar: Account["avatar"];
-  level: Account["level"];
-  xp: number;
-  countryCode: string;
   bio: string;
-  official: boolean;
-  verified: boolean;
-  role: Account["role"];
-  writer: boolean;
-  followersCount: number;
-  followingCount: number;
-  articleCount: number;
-  isFollowing: boolean;
-  followsOfficial: boolean;
+  countryCode: string;
+  level: Level;
+  xp: number;
+  avatar: Avatar | null;
+  joinedAt: string;
+  updatedAt: string;
 }
 
-export interface ProfileStatistics {
+export interface ProfileStats {
   followers: number;
   following: number;
-  articlesPublished: number;
-  xp: number;
-  level: Account["level"];
+  articlesRead: number;
+  vocabularyLearned: number;
+  practiceCompleted: number;
+  roomsJoined: number;
+  achievementsUnlocked: number;
 }
 
-export function createPublicProfile(
-  account: Account,
-  follows: Follow[],
-  writerProfile?: WriterProfile | null,
-  viewerId?: string,
-): PublicProfile {
-  const articleCount =
-    writerProfile?.publishedArticles ?? 0;
+function cleanString(
+  value: unknown,
+): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
+}
+
+export function createProfile(
+  input: Omit<
+    UserProfileData,
+    "joinedAt" | "updatedAt"
+  >,
+): UserProfileData {
+  const timestamp =
+    new Date().toISOString();
 
   return {
-    id: account.id,
-    username: account.username,
-    displayName: account.displayName,
-    avatar: account.avatar,
-    level: account.level,
-    xp: account.xp,
-    countryCode: account.countryCode,
-    bio: account.bio,
-    official: account.official,
-    verified: account.verified,
-    role: account.role,
-    writer: account.role === "writer",
-    followersCount: getFollowerCount(
-      follows,
-      account.id,
+    ...input,
+    id: cleanString(input.id),
+    username: cleanString(
+      input.username,
     ),
-    followingCount: getFollowingCount(
-      follows,
-      account.id,
+    displayName: cleanString(
+      input.displayName,
     ),
-    articleCount,
-    isFollowing:
-      viewerId && viewerId !== account.id
-        ? getFollowing(
-            follows,
-            viewerId,
-          ).some(
-            (follow) =>
-              follow.followingId === account.id,
+    bio: cleanString(input.bio),
+    countryCode: cleanString(
+      input.countryCode,
+    ).toUpperCase(),
+    xp: Math.max(0, input.xp),
+    joinedAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+export function normalizeProfile(
+  profile: UserProfileData,
+): UserProfileData {
+  return {
+    ...profile,
+    id: cleanString(profile.id),
+    username:
+      cleanString(profile.username) ||
+      "User",
+    displayName:
+      cleanString(
+        profile.displayName,
+      ) ||
+      cleanString(profile.username) ||
+      "User",
+    bio: cleanString(profile.bio),
+    countryCode: cleanString(
+      profile.countryCode,
+    ).toUpperCase(),
+    xp: Math.max(0, profile.xp ?? 0),
+    joinedAt:
+      cleanString(profile.joinedAt) ||
+      new Date().toISOString(),
+    updatedAt:
+      cleanString(profile.updatedAt) ||
+      new Date().toISOString(),
+  };
+}
+
+export function updateProfile(
+  profile: UserProfileData,
+  changes: Partial<
+    Pick<
+      UserProfileData,
+      | "username"
+      | "displayName"
+      | "bio"
+      | "countryCode"
+      | "avatar"
+    >
+  >,
+): UserProfileData {
+  return {
+    ...profile,
+
+    username:
+      changes.username !== undefined
+        ? cleanString(changes.username)
+        : profile.username,
+
+    displayName:
+      changes.displayName !== undefined
+        ? cleanString(
+            changes.displayName,
           )
-        : false,
-    followsOfficial:
-      viewerId
-        ? isOfficialFollow(
-            follows,
-            viewerId,
-          )
-        : false,
+        : profile.displayName,
+
+    bio:
+      changes.bio !== undefined
+        ? cleanString(changes.bio)
+        : profile.bio,
+
+    countryCode:
+      changes.countryCode !== undefined
+        ? cleanString(
+            changes.countryCode,
+          ).toUpperCase()
+        : profile.countryCode,
+
+    avatar:
+      changes.avatar !== undefined
+        ? changes.avatar
+        : profile.avatar,
+
+    updatedAt:
+      new Date().toISOString(),
   };
 }
 
-export function getProfileStatistics(
-  account: Account,
-  follows: Follow[],
-  writerProfile?: WriterProfile | null,
-): ProfileStatistics {
-  return {
-    followers: getFollowerCount(
-      follows,
-      account.id,
-    ),
-    following: getFollowingCount(
-      follows,
-      account.id,
-    ),
-    articlesPublished:
-      writerProfile?.publishedArticles ?? 0,
-    xp: account.xp,
-    level: account.level,
-  };
-}
+export function getProfileInitials(
+  profile: UserProfileData,
+): string {
+  const source =
+    profile.displayName ||
+    profile.username ||
+    "U";
 
-export function canViewPublicProfile(
-  account: Account | null,
-): boolean {
-  return Boolean(
-    account && account.status === "active",
-  );
-}
+  const words = source
+    .split(/\s+/)
+    .filter(Boolean);
 
-export function canEditProfile(
-  viewer: Account,
-  profileOwnerId: string,
-): boolean {
-  return viewer.id === profileOwnerId;
-}
-
-export function updateProfileBio(
-  account: Account,
-  bio: string,
-): Account {
-  return {
-    ...account,
-    bio: bio.trim(),
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-export function updateProfileCountry(
-  account: Account,
-  countryCode: string,
-): Account {
-  return {
-    ...account,
-    countryCode: countryCode.trim().toUpperCase(),
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-export function getProfileRelationship(
-  viewerId: string,
-  profileId: string,
-  follows: Follow[],
-) {
-  if (viewerId === profileId) {
-    return {
-      isSelf: true,
-      isFollowing: false,
-    };
+  if (words.length >= 2) {
+    return (
+      words[0][0] +
+      words[words.length - 1][0]
+    ).toUpperCase();
   }
 
-  return {
-    isSelf: false,
-    isFollowing: getFollowing(
-      follows,
-      viewerId,
-    ).some(
-      (follow) =>
-        follow.followingId === profileId,
-    ),
-  };
+  return source
+    .slice(0, 2)
+    .toUpperCase();
 }
 
-export function getFollowerProfiles(
-  profileId: string,
-  follows: Follow[],
+export function validateProfile(
+  profile: UserProfileData,
 ): string[] {
-  return getFollowers(
-    follows,
-    profileId,
-  ).map((follow) => follow.followerId);
-}
+  const errors: string[] = [];
 
-export function getFollowingProfiles(
-  profileId: string,
-  follows: Follow[],
-): string[] {
-  return getFollowing(
-    follows,
-    profileId,
-  ).map((follow) => follow.followingId);
+  if (!profile.id.trim()) {
+    errors.push("Profile ID is required.");
+  }
+
+  if (!profile.username.trim()) {
+    errors.push("Username is required.");
+  }
+
+  if (
+    profile.username.trim().length >
+    30
+  ) {
+    errors.push(
+      "Username cannot exceed 30 characters.",
+    );
+  }
+
+  if (
+    profile.bio.trim().length >
+    300
+  ) {
+    errors.push(
+      "Bio cannot exceed 300 characters.",
+    );
+  }
+
+  if (
+    profile.countryCode &&
+    !/^[A-Z]{2}$/.test(
+      profile.countryCode.toUpperCase(),
+    )
+  ) {
+    errors.push(
+      "Country code must use ISO 3166-1 alpha-2 format.",
+    );
+  }
+
+  return errors;
 }
+  
+    
+    
+    
+      
