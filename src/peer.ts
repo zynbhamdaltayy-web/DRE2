@@ -59,9 +59,6 @@ export function getCurrentUserId(): string {
 
 /**
  * Sets the local user's ID for the current room.
- *
- * This is used when the room sends control messages
- * to identify which participant must be affected.
  */
 export function setCurrentUserId(
   userId: string,
@@ -109,7 +106,81 @@ export async function requestLocalMedia(
   roomState.localStream =
     stream;
 
+  enforceLocalMediaPermissions();
+
   return stream;
+}
+
+// ======================================================
+// ENFORCE LOCAL MEDIA PERMISSIONS
+// ======================================================
+
+/**
+ * Applies the current room permissions directly
+ * to the local media tracks and outgoing PeerJS
+ * connections.
+ *
+ * Camera:
+ * - disables the local video track
+ * - removes outgoing video when permission is denied
+ *
+ * Microphone:
+ * - disables the local audio track
+ *
+ * Screen share:
+ * - is stopped separately because screen sharing
+ *   must release the browser's display capture.
+ */
+export function enforceLocalMediaPermissions(): void {
+  const localStream =
+    roomState.localStream;
+
+  if (localStream) {
+    const cameraTracks =
+      localStream.getVideoTracks();
+
+    for (
+      const track of cameraTracks
+    ) {
+      track.enabled =
+        roomState.cameraEnabled;
+    }
+
+    const microphoneTracks =
+      localStream.getAudioTracks();
+
+    for (
+      const track of microphoneTracks
+    ) {
+      track.enabled =
+        roomState.microphoneEnabled;
+    }
+  }
+
+  if (
+    !roomState.cameraEnabled
+  ) {
+    removeOutgoingVideoTrack();
+  } else if (
+    !roomState.screenStream
+  ) {
+    const cameraTrack =
+      roomState.localStream
+        ?.getVideoTracks()[0];
+
+    if (cameraTrack) {
+      replaceOutgoingVideoTrack(
+        cameraTrack,
+      );
+    }
+  }
+
+  if (
+    !roomState.screenShareEnabled &&
+    roomState.screenStream
+  ) {
+    stopScreenShare();
+  }
 }
 
 // ======================================================
@@ -130,7 +201,9 @@ function getOutgoingStream(): MediaStream | null {
     const audioTracks =
       localStream.getAudioTracks();
 
-    for (const track of audioTracks) {
+    for (
+      const track of audioTracks
+    ) {
       if (
         roomState.microphoneEnabled
       ) {
@@ -155,7 +228,9 @@ function getOutgoingStream(): MediaStream | null {
     const screenAudioTracks =
       screenStream.getAudioTracks();
 
-    for (const track of screenAudioTracks) {
+    for (
+      const track of screenAudioTracks
+    ) {
       stream.addTrack(track);
     }
 
@@ -299,6 +374,8 @@ export async function joinRoom(
     });
   }
 
+  enforceLocalMediaPermissions();
+
   const outgoingStream =
     getOutgoingStream();
 
@@ -368,6 +445,8 @@ export function answerIncomingCalls(
               roomState.microphoneEnabled,
           });
         }
+
+        enforceLocalMediaPermissions();
 
         const outgoingStream =
           getOutgoingStream();
@@ -565,47 +644,105 @@ function handleControlMessage(
   switch (
     message.type
   ) {
-    case "camera":
+    // --------------------------------------------------
+    // INDIVIDUAL CAMERA PERMISSION
+    // --------------------------------------------------
+
+    case "camera": {
+      const enabled =
+        message.enabled !==
+        false;
+
+      applyLocalCameraPermission(
+        enabled,
+      );
+
+      break;
+    }
+
+    // --------------------------------------------------
+    // ROOM CAMERA PERMISSION
+    // --------------------------------------------------
+
     case "room-camera": {
       const enabled =
         message.enabled !==
         false;
 
-      applyRemoteCameraPermission(
-        peerId,
+      applyLocalCameraPermission(
         enabled,
       );
 
       break;
     }
 
-    case "microphone":
+    // --------------------------------------------------
+    // INDIVIDUAL MICROPHONE PERMISSION
+    // --------------------------------------------------
+
+    case "microphone": {
+      const enabled =
+        message.enabled !==
+        false;
+
+      applyLocalMicrophonePermission(
+        enabled,
+      );
+
+      break;
+    }
+
+    // --------------------------------------------------
+    // ROOM MICROPHONE PERMISSION
+    // --------------------------------------------------
+
     case "room-microphone": {
       const enabled =
         message.enabled !==
         false;
 
-      applyRemoteMicrophonePermission(
-        peerId,
+      applyLocalMicrophonePermission(
         enabled,
       );
 
       break;
     }
 
-    case "screen-share":
+    // --------------------------------------------------
+    // INDIVIDUAL SCREEN SHARE PERMISSION
+    // --------------------------------------------------
+
+    case "screen-share": {
+      const enabled =
+        message.enabled !==
+        false;
+
+      applyLocalScreenSharePermission(
+        enabled,
+      );
+
+      break;
+    }
+
+    // --------------------------------------------------
+    // ROOM SCREEN SHARE PERMISSION
+    // --------------------------------------------------
+
     case "room-screen-share": {
       const enabled =
         message.enabled !==
         false;
 
-      applyRemoteScreenSharePermission(
-        peerId,
+      applyLocalScreenSharePermission(
         enabled,
       );
 
       break;
     }
+
+    // --------------------------------------------------
+    // FORCE STOP SCREEN SHARE
+    // --------------------------------------------------
 
     case "force-stop-screen-share": {
       if (
@@ -616,14 +753,29 @@ function handleControlMessage(
 
       break;
     }
+
+    default:
+      break;
   }
 }
 
 // ======================================================
-// OWNER CONTROL — LOCAL CAMERA
+// LOCAL CAMERA PERMISSION
 // ======================================================
 
-export function setLocalCameraPermission(
+/**
+ * Applies a camera permission decision
+ * to the current local participant.
+ *
+ * When disabled:
+ * - camera tracks are disabled
+ * - outgoing video is removed
+ *
+ * When enabled:
+ * - camera track is restored if available
+ * - outgoing video is restored
+ */
+export function applyLocalCameraPermission(
   enabled: boolean,
 ): void {
   roomState.cameraEnabled =
@@ -642,15 +794,7 @@ export function setLocalCameraPermission(
   }
 
   if (!enabled) {
-    if (
-      roomState.screenStream
-    ) {
-      replaceOutgoingVideoTrack(
-        getCameraReplacementTrack(),
-      );
-    } else {
-      removeOutgoingVideoTrack();
-    }
+    removeOutgoingVideoTrack();
   } else if (
     !roomState.screenStream
   ) {
@@ -665,17 +809,32 @@ export function setLocalCameraPermission(
     }
   }
 
-  broadcastControlMessage({
-    type: "camera",
-    enabled,
-  });
+  window.dispatchEvent(
+    new CustomEvent(
+      "dre2learn:local-camera-permission",
+      {
+        detail: {
+          enabled,
+          roomId:
+            currentRoomId,
+        },
+      },
+    ),
+  );
 }
 
 // ======================================================
-// OWNER CONTROL — LOCAL MICROPHONE
+// LOCAL MICROPHONE PERMISSION
 // ======================================================
 
-export function setLocalMicrophonePermission(
+/**
+ * Applies microphone permission to the
+ * current local participant.
+ *
+ * When disabled, the audio track is disabled
+ * and no audio is sent through PeerJS.
+ */
+export function applyLocalMicrophonePermission(
   enabled: boolean,
 ): void {
   roomState.microphoneEnabled =
@@ -693,6 +852,86 @@ export function setLocalMicrophonePermission(
       enabled;
   }
 
+  window.dispatchEvent(
+    new CustomEvent(
+      "dre2learn:local-microphone-permission",
+      {
+        detail: {
+          enabled,
+          roomId:
+            currentRoomId,
+        },
+      },
+    ),
+  );
+}
+
+// ======================================================
+// LOCAL SCREEN SHARE PERMISSION
+// ======================================================
+
+/**
+ * Applies screen-share permission to the
+ * current local participant.
+ *
+ * If permission is revoked while sharing,
+ * the actual display stream is stopped.
+ */
+export function applyLocalScreenSharePermission(
+  enabled: boolean,
+): void {
+  roomState.screenShareEnabled =
+    enabled;
+
+  if (
+    !enabled &&
+    roomState.screenStream
+  ) {
+    stopScreenShare();
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(
+      "dre2learn:local-screen-share-permission",
+      {
+        detail: {
+          enabled,
+          roomId:
+            currentRoomId,
+        },
+      },
+    ),
+  );
+}
+
+// ======================================================
+// OWNER CONTROL — LOCAL CAMERA
+// ======================================================
+
+export function setLocalCameraPermission(
+  enabled: boolean,
+): void {
+  applyLocalCameraPermission(
+    enabled,
+  );
+
+  broadcastControlMessage({
+    type: "camera",
+    enabled,
+  });
+}
+
+// ======================================================
+// OWNER CONTROL — LOCAL MICROPHONE
+// ======================================================
+
+export function setLocalMicrophonePermission(
+  enabled: boolean,
+): void {
+  applyLocalMicrophonePermission(
+    enabled,
+  );
+
   broadcastControlMessage({
     type: "microphone",
     enabled,
@@ -706,16 +945,9 @@ export function setLocalMicrophonePermission(
 export function setLocalScreenSharePermission(
   enabled: boolean,
 ): void {
-  roomState.screenShareEnabled =
-    enabled;
-
-  if (!enabled) {
-    if (
-      roomState.screenStream
-    ) {
-      stopScreenShare();
-    }
-  }
+  applyLocalScreenSharePermission(
+    enabled,
+  );
 
   broadcastControlMessage({
     type:
@@ -725,7 +957,7 @@ export function setLocalScreenSharePermission(
 }
 
 // ======================================================
-// APPLY CAMERA PERMISSION
+// APPLY CAMERA PERMISSION — REMOTE MEMBER STATE
 // ======================================================
 
 function applyRemoteCameraPermission(
@@ -760,7 +992,7 @@ function applyRemoteCameraPermission(
 }
 
 // ======================================================
-// APPLY MICROPHONE PERMISSION
+// APPLY MICROPHONE PERMISSION — REMOTE MEMBER STATE
 // ======================================================
 
 function applyRemoteMicrophonePermission(
@@ -795,7 +1027,7 @@ function applyRemoteMicrophonePermission(
 }
 
 // ======================================================
-// APPLY SCREEN SHARE PERMISSION
+// APPLY SCREEN SHARE PERMISSION — REMOTE MEMBER STATE
 // ======================================================
 
 function applyRemoteScreenSharePermission(
@@ -902,6 +1134,10 @@ export function sendRoomCameraPermission(
       "room-camera",
     enabled,
   });
+
+  applyLocalCameraPermission(
+    enabled,
+  );
 }
 
 export function sendRoomMicrophonePermission(
@@ -915,6 +1151,10 @@ export function sendRoomMicrophonePermission(
       "room-microphone",
     enabled,
   });
+
+  applyLocalMicrophonePermission(
+    enabled,
+  );
 }
 
 export function sendRoomScreenSharePermission(
@@ -923,19 +1163,15 @@ export function sendRoomScreenSharePermission(
   roomState.screenShareEnabled =
     enabled;
 
-  if (!enabled) {
-    if (
-      roomState.screenStream
-    ) {
-      stopScreenShare();
-    }
-  }
-
   broadcastControlMessage({
     type:
       "room-screen-share",
     enabled,
   });
+
+  applyLocalScreenSharePermission(
+    enabled,
+  );
 }
 
 // ======================================================
@@ -1086,6 +1322,26 @@ export async function startScreenShare(): Promise<MediaStream> {
         audio: true,
       },
     );
+
+  /**
+   * Permission can theoretically change while
+   * the browser is resolving getDisplayMedia().
+   *
+   * Re-check before accepting the stream.
+   */
+  if (
+    !roomState.screenShareEnabled
+  ) {
+    for (
+      const track of screenStream.getTracks()
+    ) {
+      track.stop();
+    }
+
+    throw new Error(
+      "Screen sharing has been disabled by the room owner.",
+    );
+  }
 
   roomState.screenStream =
     screenStream;
@@ -1360,7 +1616,7 @@ export function stopScreenShare(): void {
   roomState.screenStream =
     null;
 
-  // Restore camera if camera permission
+  // Restore camera only when permission
   // is still enabled.
   if (
     roomState.cameraEnabled
@@ -1370,6 +1626,9 @@ export function stopScreenShare(): void {
         ?.getVideoTracks()[0];
 
     if (cameraTrack) {
+      cameraTrack.enabled =
+        true;
+
       replaceOutgoingVideoTrack(
         cameraTrack,
       );
@@ -1459,6 +1718,11 @@ function removeScreenAudioTracksFromAllConnections(
 export function toggleMicrophone(
   enabled: boolean,
 ): void {
+  /**
+   * Permission is authoritative.
+   * A participant cannot turn the microphone
+   * back on while the room owner has denied it.
+   */
   if (
     !roomState.microphoneEnabled
   ) {
@@ -1485,6 +1749,11 @@ export function toggleMicrophone(
 export function toggleCamera(
   enabled: boolean,
 ): void {
+  /**
+   * Permission is authoritative.
+   * A participant cannot turn the camera
+   * back on while access is denied.
+   */
   if (
     !roomState.cameraEnabled
   ) {
@@ -1501,6 +1770,22 @@ export function toggleCamera(
   ) {
     track.enabled =
       enabled;
+  }
+
+  if (!enabled) {
+    removeOutgoingVideoTrack();
+  } else if (
+    !roomState.screenStream
+  ) {
+    const cameraTrack =
+      roomState.localStream
+        ?.getVideoTracks()[0];
+
+    if (cameraTrack) {
+      replaceOutgoingVideoTrack(
+        cameraTrack,
+      );
+    }
   }
 }
 
@@ -1563,13 +1848,3 @@ export function leaveRoom(): void {
     ),
   );
 }
-    
-    
-            
-
-
-
-
-      
-
-  
