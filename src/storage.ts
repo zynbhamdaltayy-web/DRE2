@@ -1,4 +1,8 @@
-import type { AppState } from "./types";
+import type {
+  AppState,
+  LearningCard,
+} from "./types";
+
 import { updateStreak } from "./data/progress";
 
 const STORAGE_KEY = "dre2learn_state";
@@ -48,7 +52,7 @@ function createSafeState(
 
         xp:
           typeof state.user.xp === "number"
-            ? state.user.xp
+            ? Math.max(0, state.user.xp)
             : 0,
 
         identityCard:
@@ -116,7 +120,7 @@ function createSafeState(
 
     totalXp:
       typeof state.totalXp === "number"
-        ? state.totalXp
+        ? Math.max(0, state.totalXp)
         : user?.xp ?? 0,
 
     // ==================================================
@@ -176,7 +180,30 @@ function createSafeState(
 
     collectedCards:
       Array.isArray(state.collectedCards)
-        ? state.collectedCards
+        ? state.collectedCards.map(
+            (card) => ({
+              ...card,
+
+              timesUsed:
+                typeof card.timesUsed === "number"
+                  ? Math.max(
+                      0,
+                      card.timesUsed,
+                    )
+                  : 0,
+
+              timesPlayed:
+                typeof card.timesPlayed === "number"
+                  ? Math.max(
+                      0,
+                      card.timesPlayed,
+                    )
+                  : 0,
+
+              rewardClaimed:
+                card.rewardClaimed === true,
+            }),
+          )
         : [],
 
     // ==================================================
@@ -307,7 +334,6 @@ function createSafeState(
  * - updates longest streak
  * - saves today's date
  * - adds XP to today's daily progress
- * - never counts the same activity twice through this helper
  */
 function registerLearningActivity(
   state: AppState,
@@ -332,10 +358,6 @@ function registerLearningActivity(
           .slice(0, 10)
       : "";
 
-  /*
-    If the previous activity was not today,
-    today's Daily XP starts from zero.
-  */
   const previousDailyXp =
     previousDate === today
       ? typeof currentProgress.dailyXp ===
@@ -500,10 +522,20 @@ export function addXP(
   }
 
   const currentUserXp =
-    state.user?.xp ?? 0;
+    Math.max(
+      0,
+      state.user?.xp ?? 0,
+    );
+
+  const currentTotalXp =
+    Math.max(
+      0,
+      state.totalXp,
+    );
 
   const newTotalXp =
-    state.totalXp + amount;
+    currentTotalXp +
+    amount;
 
   const updatedState: AppState = {
     ...state,
@@ -531,6 +563,74 @@ export function addXP(
     updatedState,
     amount,
   );
+}
+
+/* ======================================================
+   REMOVE XP
+====================================================== */
+
+/**
+ * Removes XP from the user's balance.
+ *
+ * Used when collecting a learning card.
+ *
+ * Card collection costs 1 XP.
+ */
+export function removeXP(
+  state: AppState,
+  amount: number,
+): AppState {
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0
+  ) {
+    return state;
+  }
+
+  const currentTotalXp =
+    Math.max(
+      0,
+      state.totalXp,
+    );
+
+  const currentUserXp =
+    Math.max(
+      0,
+      state.user?.xp ?? 0,
+    );
+
+  /*
+    Never allow XP to become negative.
+  */
+  const actualAmount =
+    Math.min(
+      amount,
+      currentTotalXp,
+      currentUserXp,
+    );
+
+  if (actualAmount <= 0) {
+    return state;
+  }
+
+  return {
+    ...state,
+
+    totalXp:
+      currentTotalXp -
+      actualAmount,
+
+    user:
+      state.user
+        ? {
+            ...state.user,
+
+            xp:
+              currentUserXp -
+              actualAmount,
+          }
+        : null,
+  };
 }
 
 /* ======================================================
@@ -628,21 +728,225 @@ export function markRoomJoined(
 }
 
 /* ======================================================
-   CARDS
+   CARDS — COLLECT
 ====================================================== */
 
+/**
+ * Collecting a card costs 1 XP.
+ *
+ * Rules:
+ * - Card must not already be collected.
+ * - User must have at least 1 XP.
+ * - 1 XP is deducted immediately.
+ * - No completion reward is given here.
+ */
+export function collectCardWithXP(
+  state: AppState,
+  card: LearningCard,
+): AppState {
+  const collectedCards =
+    state.collectedCards ?? [];
+
+  /*
+    Prevent collecting the same card twice.
+  */
+  const alreadyCollected =
+    collectedCards.some(
+      (item) =>
+        item.cardId ===
+        card.id,
+    );
+
+  if (alreadyCollected) {
+    return state;
+  }
+
+  /*
+    Card collection costs 1 XP.
+    The card's configured xpCost is used,
+    with 1 as the required default.
+  */
+  const cost =
+    Math.max(
+      0,
+      card.xpCost ?? 1,
+    );
+
+  /*
+    Do not allow collection without
+    enough XP.
+  */
+  if (
+    state.totalXp < cost ||
+    (state.user &&
+      state.user.xp < cost)
+  ) {
+    return state;
+  }
+
+  /*
+    Deduct XP.
+  */
+  const stateAfterCost =
+    removeXP(
+      state,
+      cost,
+    );
+
+  /*
+    Add card to collection.
+    The completion reward starts as unclaimed.
+  */
+  const updatedCollectedCards = [
+    ...(stateAfterCost.collectedCards ??
+      []),
+
+    {
+      cardId: card.id,
+
+      collectedAt:
+        new Date().toISOString(),
+
+      timesUsed: 0,
+
+      timesPlayed: 0,
+
+      rewardClaimed: false,
+    },
+  ];
+
+  return {
+    ...stateAfterCost,
+
+    collectedCards:
+      updatedCollectedCards,
+
+    cardsCollected:
+      stateAfterCost.cardsCollected +
+      1,
+  };
+}
+
+/* ======================================================
+   CARDS — COMPLETE
+====================================================== */
+
+/**
+ * Completing a collected card gives 3 XP.
+ *
+ * Rules:
+ * - Card must already be collected.
+ * - Reward can only be claimed once.
+ * - Completing the same card again gives 0 XP.
+ * - rewardClaimed is stored permanently in AppState.
+ */
+export function completeCardWithXP(
+  state: AppState,
+  card: LearningCard,
+): AppState {
+  const collectedCards =
+    state.collectedCards ?? [];
+
+  const collectedIndex =
+    collectedCards.findIndex(
+      (item) =>
+        item.cardId ===
+        card.id,
+    );
+
+  /*
+    Card must be collected first.
+  */
+  if (
+    collectedIndex === -1
+  ) {
+    return state;
+  }
+
+  const collected =
+    collectedCards[
+      collectedIndex
+    ];
+
+  /*
+    The 3 XP reward has already
+    been claimed.
+  */
+  if (
+    collected.rewardClaimed === true
+  ) {
+    return state;
+  }
+
+  /*
+    Card completion reward.
+    Default = 3 XP.
+  */
+  const reward =
+    Math.max(
+      0,
+      card.xpReward ?? 3,
+    );
+
+  /*
+    Mark the reward as claimed
+    BEFORE adding XP.
+    This prevents duplicate rewards.
+  */
+  const updatedCollectedCards =
+    collectedCards.map(
+      (item) =>
+        item.cardId ===
+        card.id
+          ? {
+              ...item,
+
+              timesUsed:
+                (item.timesUsed ??
+                  0) + 1,
+
+              rewardClaimed:
+                true,
+            }
+          : item,
+    );
+
+  const stateWithCompletedCard: AppState = {
+    ...state,
+
+    collectedCards:
+      updatedCollectedCards,
+  };
+
+  /*
+    Give the reward only once.
+  */
+  return addXP(
+    stateWithCompletedCard,
+    reward,
+  );
+}
+
+/* ======================================================
+   LEGACY CARD FUNCTION
+====================================================== */
+
+/**
+ * Kept for compatibility with existing code.
+ *
+ * New card collection logic should use:
+ * collectCardWithXP()
+ *
+ * This old function no longer gives 3 XP,
+ * because collecting a card costs XP now.
+ */
 export function addCollectedCard(
   state: AppState,
 ): AppState {
-  const updatedState: AppState = {
+  return {
     ...state,
 
     cardsCollected:
       state.cardsCollected + 1,
   };
-
-  return addXP(
-    updatedState,
-    3,
-  );
 }
