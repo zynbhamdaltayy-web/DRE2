@@ -1,4 +1,4 @@
-import type { Level } from "../types";
+import type { Level, Avatar } from "../types";
 
 export type WriterApplicationStatus =
   | "draft"
@@ -74,7 +74,13 @@ export type WriterTopic = (typeof WRITER_TOPICS)[number];
 export interface WriterApplication {
   id: string;
   userId: string;
+
+  username: string;
   displayName: string;
+  email: string;
+  avatar: Avatar;
+  countryCode: string;
+
   bio: string;
   languages: WriterLanguage[];
   levels: Level[];
@@ -82,6 +88,7 @@ export interface WriterApplication {
   experience: string;
   motivation: string;
   writingSample: string;
+
   status: WriterApplicationStatus;
   reviewerNote: string;
   submittedAt: string | null;
@@ -239,13 +246,33 @@ export function createEmptyWriterArticleForm(): WriterArticleForm {
 export function createWriterApplication(
   userId: string,
   form: WriterApplicationForm,
+  account?: {
+    username?: string;
+    email?: string;
+    avatar?: Avatar;
+    countryCode?: string;
+  },
 ): WriterApplication {
   const timestamp = nowIso();
 
   return {
     id: createId("writer-application"),
     userId,
+
+    username: cleanText(account?.username ?? ""),
     displayName: cleanText(form.displayName),
+    email: cleanText(account?.email ?? ""),
+    avatar: account?.avatar ?? {
+      gender: "girl",
+      skinTone: "medium",
+      eyeColor: "brown",
+      hairStyle: "long",
+      hairColor: "black",
+      shirtColor: "orange",
+      hijab: false,
+    },
+    countryCode: cleanText(account?.countryCode ?? "UN"),
+
     bio: cleanLongText(form.bio),
     languages: [...form.languages],
     levels: [...form.levels],
@@ -253,6 +280,7 @@ export function createWriterApplication(
     experience: cleanLongText(form.experience),
     motivation: cleanLongText(form.motivation),
     writingSample: cleanLongText(form.writingSample),
+
     status: "draft",
     reviewerNote: "",
     submittedAt: null,
@@ -377,12 +405,14 @@ export function approveWriterApplication(
   application: WriterApplication,
   reviewerNote = "",
 ): WriterApplication {
+  const timestamp = nowIso();
+
   return {
     ...application,
     status: "approved",
     reviewerNote: cleanLongText(reviewerNote),
-    reviewedAt: nowIso(),
-    updatedAt: nowIso(),
+    reviewedAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
@@ -390,12 +420,14 @@ export function rejectWriterApplication(
   application: WriterApplication,
   reviewerNote: string,
 ): WriterApplication {
+  const timestamp = nowIso();
+
   return {
     ...application,
     status: "rejected",
     reviewerNote: cleanLongText(reviewerNote),
-    reviewedAt: nowIso(),
-    updatedAt: nowIso(),
+    reviewedAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
@@ -532,14 +564,16 @@ export function submitWriterArticle(
     throw new Error(validationErrors[0]);
   }
 
+  const timestamp = nowIso();
+
   return {
     ...article,
     status: "submitted",
     reviewerNote: "",
-    submittedAt: nowIso(),
+    submittedAt: timestamp,
     reviewedAt: null,
     publishedAt: null,
-    updatedAt: nowIso(),
+    updatedAt: timestamp,
   };
 }
 
@@ -547,12 +581,14 @@ export function approveWriterArticle(
   article: WriterArticle,
   reviewerNote = "",
 ): WriterArticle {
+  const timestamp = nowIso();
+
   return {
     ...article,
     status: "approved",
     reviewerNote: cleanLongText(reviewerNote),
-    reviewedAt: nowIso(),
-    updatedAt: nowIso(),
+    reviewedAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
@@ -560,13 +596,15 @@ export function rejectWriterArticle(
   article: WriterArticle,
   reviewerNote: string,
 ): WriterArticle {
+  const timestamp = nowIso();
+
   return {
     ...article,
     status: "rejected",
     reviewerNote: cleanLongText(reviewerNote),
-    reviewedAt: nowIso(),
+    reviewedAt: timestamp,
     publishedAt: null,
-    updatedAt: nowIso(),
+    updatedAt: timestamp,
   };
 }
 
@@ -816,16 +854,23 @@ export function normalizeWriterApplication(
 ): WriterApplication {
   return {
     ...application,
+
+    username: cleanText(application.username),
     displayName: cleanText(application.displayName),
+    email: cleanText(application.email),
+    countryCode: cleanText(application.countryCode || "UN"),
+
     bio: cleanLongText(application.bio),
     experience: cleanLongText(application.experience),
     motivation: cleanLongText(application.motivation),
     writingSample: cleanLongText(application.writingSample),
+
     languages: application.languages.filter(
       isSupportedWriterLanguage,
     ),
     levels: application.levels.filter(isValidWriterLevel),
     topics: application.topics.filter(isWriterTopic),
+
     reviewerNote: cleanLongText(application.reviewerNote),
   };
 }
@@ -858,3 +903,23 @@ export function normalizeWriterArticle(
     reviewerNote: cleanLongText(article.reviewerNote),
   };
 }
+
+  
+  
+
+
+
+  
+
+    
+    
+    
+    
+  
+    
+  
+
+
+  
+  
+  
