@@ -1,5 +1,6 @@
 import {
   createNotification,
+  normalizeNotification,
   type Notification,
   type NotificationInput,
   getUserNotifications,
@@ -28,23 +29,47 @@ function readData(): NotificationStorageData {
       };
     }
 
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("notifications" in parsed)
+    ) {
+      return {
+        notifications: [],
+      };
+    }
+
+    const notificationsValue = (
+      parsed as {
+        notifications?: unknown;
+      }
+    ).notifications;
+
+    if (!Array.isArray(notificationsValue)) {
+      return {
+        notifications: [],
+      };
+    }
 
     return {
-      notifications: Array.isArray(parsed.notifications)
-        ? parsed.notifications
-        : [],
+      notifications: notificationsValue.map((item) =>
+        normalizeNotification(item as Notification),
+      ),
     };
   } catch {
     return {
       ...DEFAULT_DATA,
-      notifications: [],
     };
   }
 }
 
 function writeData(data: NotificationStorageData): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(data),
+  );
 }
 
 export function getNotificationStorage(): NotificationStorageData {
@@ -90,17 +115,29 @@ export function saveNotification(
 ): Notification {
   const data = readData();
 
-  data.notifications.push(notification);
+  const normalized = normalizeNotification(notification);
+
+  const existingIndex = data.notifications.findIndex(
+    (item) => item.id === normalized.id,
+  );
+
+  if (existingIndex >= 0) {
+    data.notifications[existingIndex] = normalized;
+  } else {
+    data.notifications.push(normalized);
+  }
 
   writeData(data);
 
-  return notification;
+  return normalized;
 }
 
 export function createAndSaveNotification(
   input: NotificationInput,
 ): Notification {
-  return saveNotification(createNotification(input));
+  const notification = createNotification(input);
+
+  return saveNotification(notification);
 }
 
 export function markNotificationAsRead(
@@ -183,3 +220,10 @@ export function initializeNotificationStorage(): void {
     writeData(DEFAULT_DATA);
   }
 }
+    
+
+
+  
+  
+
+  
