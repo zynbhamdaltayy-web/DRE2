@@ -4,8 +4,7 @@ import {
   type AppSettings,
 } from "./settings";
 
-const STORAGE_KEY =
-  "dre2learn-settings";
+const STORAGE_KEY = "dre2learn-settings";
 
 const STORAGE_VERSION = 2;
 
@@ -105,17 +104,17 @@ export function updateSettings(
     ...changes,
 
     notifications: {
-      ...current.notifications,
+      ...(current.notifications ?? {}),
       ...(changes.notifications ?? {}),
     },
 
     privacy: {
-      ...current.privacy,
+      ...(current.privacy ?? {}),
       ...(changes.privacy ?? {}),
     },
 
     learning: {
-      ...current.learning,
+      ...(current.learning ?? {}),
       ...(changes.learning ?? {}),
     },
   };
@@ -136,11 +135,27 @@ export function resetStoredSettings(): AppSettings {
 }
 
 export function clearSettingsStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(
+      STORAGE_KEY,
+    );
+  } catch {
+    // Ignore storage errors.
+  }
 }
 
 export function initializeSettingsStorage(): void {
-  if (!localStorage.getItem(STORAGE_KEY)) {
-    writeData(createDefaultData());
+  try {
+    if (
+      !localStorage.getItem(
+        STORAGE_KEY,
+      )
+    ) {
+      writeData(
+        createDefaultData(),
+      );
+    }
+  } catch {
+    // Ignore storage errors.
   }
 }
