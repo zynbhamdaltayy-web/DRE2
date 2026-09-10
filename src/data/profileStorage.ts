@@ -10,6 +10,7 @@ const STORAGE_KEY =
 
 export interface ProfileStorageData {
   profile: UserProfileData | null;
+
   stats: {
     followers: number;
     following: number;
@@ -43,6 +44,7 @@ function readData(): ProfileStorageData {
     if (!raw) {
       return {
         ...DEFAULT_DATA,
+
         stats: {
           ...DEFAULT_DATA.stats,
         },
@@ -58,6 +60,7 @@ function readData(): ProfileStorageData {
     ) {
       return {
         ...DEFAULT_DATA,
+
         stats: {
           ...DEFAULT_DATA.stats,
         },
@@ -83,6 +86,7 @@ function readData(): ProfileStorageData {
   } catch {
     return {
       ...DEFAULT_DATA,
+
       stats: {
         ...DEFAULT_DATA.stats,
       },
@@ -127,8 +131,16 @@ export function saveProfile(
 export function createAndSaveProfile(
   input: Omit<
     UserProfileData,
-    "joinedAt" | "updatedAt"
-  >,
+    | "joinedAt"
+    | "updatedAt"
+    | "isVip"
+    | "vipSince"
+    | "vipUntil"
+  > & {
+    isVip?: boolean;
+    vipSince?: string;
+    vipUntil?: string;
+  },
 ): UserProfileData {
   return saveProfile(
     createProfile(input),
@@ -153,10 +165,11 @@ export function updateStoredProfile(
     return null;
   }
 
-  const updated = updateProfile(
-    data.profile,
-    changes,
-  );
+  const updated =
+    updateProfile(
+      data.profile,
+      changes,
+    );
 
   data.profile = updated;
 
@@ -188,11 +201,17 @@ export function getProfileStats():
 }
 
 export function clearProfileStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(
+    STORAGE_KEY,
+  );
 }
 
 export function initializeProfileStorage(): void {
-  if (!localStorage.getItem(STORAGE_KEY)) {
+  if (
+    !localStorage.getItem(
+      STORAGE_KEY,
+    )
+  ) {
     writeData(DEFAULT_DATA);
   }
 }
