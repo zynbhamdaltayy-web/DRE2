@@ -41,7 +41,9 @@ export const DAILY_GOAL_DEFAULT = 20;
    NORMALIZATION HELPERS
 ========================================================= */
 
-function normalizeProgressNumber(value: unknown): number {
+function normalizeProgressNumber(
+  value: unknown,
+): number {
   const numberValue = Number(value);
 
   if (!Number.isFinite(numberValue)) {
@@ -51,7 +53,9 @@ function normalizeProgressNumber(value: unknown): number {
   return Math.max(0, numberValue);
 }
 
-function normalizeDate(value: unknown): string {
+function normalizeDate(
+  value: unknown,
+): string {
   if (typeof value !== "string") {
     return "";
   }
@@ -59,8 +63,29 @@ function normalizeDate(value: unknown): string {
   return value.trim();
 }
 
+/*
+ * IMPORTANT:
+ * Use the user's LOCAL calendar date.
+ *
+ * Do NOT use toISOString() here because
+ * toISOString() converts the date to UTC.
+ *
+ * This prevents incorrect streak / daily XP
+ * calculations around midnight.
+ */
 export function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(
+    now.getMonth() + 1,
+  ).padStart(2, "0");
+
+  const day = String(
+    now.getDate(),
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function getDateDifferenceInDays(
@@ -71,8 +96,38 @@ function getDateDifferenceInDays(
     return Infinity;
   }
 
-  const from = new Date(`${fromDate}T00:00:00`);
-  const to = new Date(`${toDate}T00:00:00`);
+  /*
+   * Parse YYYY-MM-DD as local calendar dates.
+   * This keeps the calculation independent of UTC.
+   */
+  const [fromYear, fromMonth, fromDay] =
+    fromDate.split("-").map(Number);
+
+  const [toYear, toMonth, toDay] =
+    toDate.split("-").map(Number);
+
+  if (
+    !Number.isFinite(fromYear) ||
+    !Number.isFinite(fromMonth) ||
+    !Number.isFinite(fromDay) ||
+    !Number.isFinite(toYear) ||
+    !Number.isFinite(toMonth) ||
+    !Number.isFinite(toDay)
+  ) {
+    return Infinity;
+  }
+
+  const from = new Date(
+    fromYear,
+    fromMonth - 1,
+    fromDay,
+  );
+
+  const to = new Date(
+    toYear,
+    toMonth - 1,
+    toDay,
+  );
 
   if (
     Number.isNaN(from.getTime()) ||
@@ -84,8 +139,9 @@ function getDateDifferenceInDays(
   const difference =
     to.getTime() - from.getTime();
 
-  return Math.floor(
-    difference / (1000 * 60 * 60 * 24),
+  return Math.round(
+    difference /
+      (1000 * 60 * 60 * 24),
   );
 }
 
@@ -93,13 +149,18 @@ function getDateDifferenceInDays(
    LEVEL HELPERS
 ========================================================= */
 
-export function getLevelFromXp(totalXp: number): Level {
-  const xp = normalizeProgressNumber(totalXp);
+export function getLevelFromXp(
+  totalXp: number,
+): Level {
+  const xp =
+    normalizeProgressNumber(totalXp);
 
   let currentLevel: Level = "A1";
 
   for (const level of LEVEL_ORDER) {
-    if (xp >= LEVEL_THRESHOLDS[level]) {
+    if (
+      xp >= LEVEL_THRESHOLDS[level]
+    ) {
       currentLevel = level;
     } else {
       break;
@@ -112,9 +173,13 @@ export function getLevelFromXp(totalXp: number): Level {
 export function getNextLevel(
   level: Level,
 ): Level | null {
-  const index = LEVEL_ORDER.indexOf(level);
+  const index =
+    LEVEL_ORDER.indexOf(level);
 
-  if (index === -1 || index >= LEVEL_ORDER.length - 1) {
+  if (
+    index === -1 ||
+    index >= LEVEL_ORDER.length - 1
+  ) {
     return null;
   }
 
@@ -124,9 +189,14 @@ export function getNextLevel(
 export function getXpToNextLevel(
   totalXp: number,
 ): number {
-  const xp = normalizeProgressNumber(totalXp);
-  const currentLevel = getLevelFromXp(xp);
-  const nextLevel = getNextLevel(currentLevel);
+  const xp =
+    normalizeProgressNumber(totalXp);
+
+  const currentLevel =
+    getLevelFromXp(xp);
+
+  const nextLevel =
+    getNextLevel(currentLevel);
 
   if (!nextLevel) {
     return 0;
@@ -141,9 +211,14 @@ export function getXpToNextLevel(
 export function getLevelProgress(
   totalXp: number,
 ): number {
-  const xp = normalizeProgressNumber(totalXp);
-  const currentLevel = getLevelFromXp(xp);
-  const nextLevel = getNextLevel(currentLevel);
+  const xp =
+    normalizeProgressNumber(totalXp);
+
+  const currentLevel =
+    getLevelFromXp(xp);
+
+  const nextLevel =
+    getNextLevel(currentLevel);
 
   if (!nextLevel) {
     return 100;
@@ -156,18 +231,24 @@ export function getLevelProgress(
     LEVEL_THRESHOLDS[nextLevel];
 
   const range =
-    nextThreshold - currentThreshold;
+    nextThreshold -
+    currentThreshold;
 
   if (range <= 0) {
     return 100;
   }
 
   const progress =
-    ((xp - currentThreshold) / range) * 100;
+    ((xp - currentThreshold) /
+      range) *
+    100;
 
   return Math.min(
     100,
-    Math.max(0, Math.round(progress)),
+    Math.max(
+      0,
+      Math.round(progress),
+    ),
   );
 }
 
@@ -194,7 +275,9 @@ export function getLevelTestPercentage(
     Math.max(
       0,
       Math.round(
-        (normalizedScore / normalizedTotal) * 100,
+        (normalizedScore /
+          normalizedTotal) *
+          100,
       ),
     ),
   );
@@ -204,7 +287,9 @@ export function isLevelTestCompleted(
   state: AppState,
 ): boolean {
   return (
-    normalizeProgressNumber(state.levelTestTotal) > 0
+    normalizeProgressNumber(
+      state.levelTestTotal,
+    ) > 0
   );
 }
 
@@ -241,7 +326,9 @@ function getActivityPercentage(
     100,
     Math.max(
       0,
-      Math.round((current / target) * 100),
+      Math.round(
+        (current / target) * 100,
+      ),
     ),
   );
 }
@@ -250,49 +337,66 @@ export function getActivityProgress(
   state: AppState,
 ): ActivityProgress {
   const articles =
-    normalizeProgressNumber(state.articlesRead);
+    normalizeProgressNumber(
+      state.articlesRead,
+    );
 
   const vocabulary =
-    normalizeProgressNumber(state.vocabularyLearned);
+    normalizeProgressNumber(
+      state.vocabularyLearned,
+    );
 
   const practice =
-    normalizeProgressNumber(state.practiceCompleted);
+    normalizeProgressNumber(
+      state.practiceCompleted,
+    );
 
   const rooms =
-    normalizeProgressNumber(state.roomsJoined);
+    normalizeProgressNumber(
+      state.roomsJoined,
+    );
 
   const cards =
-    normalizeProgressNumber(state.cardsCollected);
+    normalizeProgressNumber(
+      state.cardsCollected,
+    );
 
   const percentages = [
     getActivityPercentage(
       articles,
       ACTIVITY_TARGETS.articles,
     ),
+
     getActivityPercentage(
       vocabulary,
       ACTIVITY_TARGETS.vocabulary,
     ),
+
     getActivityPercentage(
       practice,
       ACTIVITY_TARGETS.practice,
     ),
+
     getActivityPercentage(
       rooms,
       ACTIVITY_TARGETS.rooms,
     ),
+
     getActivityPercentage(
       cards,
       ACTIVITY_TARGETS.cards,
     ),
   ];
 
-  const total = Math.round(
-    percentages.reduce(
-      (sum, value) => sum + value,
-      0,
-    ) / percentages.length,
-  );
+  const total =
+    Math.round(
+      percentages.reduce(
+        (sum, value) =>
+          sum + value,
+        0,
+      ) /
+        percentages.length,
+    );
 
   return {
     articles,
@@ -320,7 +424,9 @@ export function getXpProgress(
   totalXp: number,
 ): XpProgress {
   const currentXp =
-    normalizeProgressNumber(totalXp);
+    normalizeProgressNumber(
+      totalXp,
+    );
 
   const currentLevel =
     getLevelFromXp(currentXp);
@@ -357,15 +463,20 @@ export function getStoredStreakData(
   state: AppState,
 ): StreakData {
   return {
-    currentStreak: normalizeProgressNumber(
-      state.progress?.currentStreak,
-    ),
-    longestStreak: normalizeProgressNumber(
-      state.progress?.longestStreak,
-    ),
-    lastActiveDate: normalizeDate(
-      state.progress?.lastActiveDate,
-    ),
+    currentStreak:
+      normalizeProgressNumber(
+        state.progress?.currentStreak,
+      ),
+
+    longestStreak:
+      normalizeProgressNumber(
+        state.progress?.longestStreak,
+      ),
+
+    lastActiveDate:
+      normalizeDate(
+        state.progress?.lastActiveDate,
+      ),
   };
 }
 
@@ -393,14 +504,30 @@ export function calculateCurrentStreak(
       today,
     );
 
+  /*
+   * Same calendar day:
+   * do not increase the streak twice.
+   */
   if (difference === 0) {
-    return Math.max(1, currentStreak);
+    return Math.max(
+      1,
+      currentStreak,
+    );
   }
 
+  /*
+   * Exactly one calendar day later:
+   * continue the streak.
+   */
   if (difference === 1) {
     return currentStreak + 1;
   }
 
+  /*
+   * More than one day later,
+   * or an invalid/future date:
+   * start a new streak.
+   */
   return 1;
 }
 
@@ -414,7 +541,8 @@ export function getStreakSummary(
 
   return {
     ...streak,
-    active: isStreakActive(state),
+    active:
+      isStreakActive(state),
   };
 }
 
@@ -458,7 +586,8 @@ export function isStreakActive(
     return false;
   }
 
-  const today = getTodayDate();
+  const today =
+    getTodayDate();
 
   const difference =
     getDateDifferenceInDays(
@@ -466,7 +595,14 @@ export function isStreakActive(
       today,
     );
 
-  return difference === 0 || difference === 1;
+  /*
+   * A streak is considered active today
+   * or still recoverable from yesterday.
+   */
+  return (
+    difference === 0 ||
+    difference === 1
+  );
 }
 
 /* =========================================================
@@ -485,12 +621,15 @@ export function getDailyGoal(
     return configuredGoal;
   }
 
+  const settingsGoal =
+    state.settings?.learning?.dailyGoal;
+
   if (
-    state.settings?.learning?.dailyGoal &&
-    state.settings.learning.dailyGoal > 0
+    typeof settingsGoal === "number" &&
+    settingsGoal > 0
   ) {
     return normalizeProgressNumber(
-      state.settings.learning.dailyGoal,
+      settingsGoal,
     );
   }
 
@@ -520,14 +659,17 @@ export function getDailyGoalProgress(
       ? 100
       : Math.min(
           100,
-          Math.round((current / goal) * 100),
+          Math.round(
+            (current / goal) * 100,
+          ),
         );
 
   return {
     current,
     goal,
     percentage,
-    completed: current >= goal,
+    completed:
+      current >= goal,
   };
 }
 
@@ -542,7 +684,9 @@ export function getOverallProgress(
     getActivityProgress(state);
 
   const levelProgress =
-    getLevelProgress(state.totalXp);
+    getLevelProgress(
+      state.totalXp,
+    );
 
   const levelTestProgress =
     isLevelTestCompleted(state)
@@ -553,16 +697,13 @@ export function getOverallProgress(
       : 0;
 
   /*
-   * Overall progress combines:
-   * - learning activities
-   * - XP / level progression
-   * - level test
-   *
-   * If the level test has not been completed,
-   * activity + XP still determine progress.
+   * Before completing the Level Test,
+   * activity progress and XP progress
+   * determine the overall progress.
    */
-
-  if (!isLevelTestCompleted(state)) {
+  if (
+    !isLevelTestCompleted(state)
+  ) {
     return Math.round(
       (activityProgress.total +
         levelProgress) /
@@ -570,6 +711,10 @@ export function getOverallProgress(
     );
   }
 
+  /*
+   * After completing the Level Test,
+   * all three components contribute.
+   */
   return Math.round(
     (activityProgress.total +
       levelProgress +
@@ -626,7 +771,8 @@ export function getProgressStats(
       : Math.min(
           100,
           Math.round(
-            (dailyXp / dailyGoal) * 100,
+            (dailyXp / dailyGoal) *
+              100,
           ),
         );
 
@@ -714,7 +860,9 @@ export function getProgressStatistics(
     getProgressStats(state);
 
   const xpProgress =
-    getXpProgress(state.totalXp);
+    getXpProgress(
+      state.totalXp,
+    );
 
   const activityProgress =
     getActivityProgress(state);
@@ -759,7 +907,9 @@ export function getLevelSummary(
   progress: number;
 } {
   const currentXp =
-    normalizeProgressNumber(totalXp);
+    normalizeProgressNumber(
+      totalXp,
+    );
 
   const level =
     getLevelFromXp(currentXp);
@@ -782,14 +932,18 @@ export function getLevelSummary(
     nextLevel,
     nextThreshold,
     xpToNextLevel:
-      getXpToNextLevel(currentXp),
+      getXpToNextLevel(
+        currentXp,
+      ),
     progress:
-      getLevelProgress(currentXp),
+      getLevelProgress(
+        currentXp,
+      ),
   };
 }
 
 /* =========================================================
-   XP REWARD HELPERS
+   XP REWARDS
 ========================================================= */
 
 export const XP_REWARDS = {
@@ -803,8 +957,7 @@ export const XP_REWARDS = {
 } as const;
 
 export function getXpReward(
-  activity:
-    | keyof typeof XP_REWARDS,
+  activity: keyof typeof XP_REWARDS,
 ): number {
   return XP_REWARDS[activity];
 }
@@ -820,17 +973,19 @@ export interface LevelInformation {
 }
 
 export function getAllLevelInformation(): LevelInformation[] {
-  return LEVEL_ORDER.map((level) => ({
-    level,
-    threshold:
-      LEVEL_THRESHOLDS[level],
-    percentage:
-      LEVEL_PERCENTAGES[level],
-  }));
+  return LEVEL_ORDER.map(
+    (level) => ({
+      level,
+      threshold:
+        LEVEL_THRESHOLDS[level],
+      percentage:
+        LEVEL_PERCENTAGES[level],
+    }),
+  );
 }
 
 /* =========================================================
-   SAFE PROGRESS RESET
+   EMPTY PROGRESS
 ========================================================= */
 
 export function createEmptyProgressStats(): ProgressStats {
@@ -847,7 +1002,8 @@ export function createEmptyProgressStats(): ProgressStats {
     levelTestTotal: 0,
     levelTestPercentage: 0,
     overallProgress: 0,
-    dailyGoal: DAILY_GOAL_DEFAULT,
+    dailyGoal:
+      DAILY_GOAL_DEFAULT,
     dailyGoalProgress: 0,
     dailyGoalCompleted: false,
     currentStreak: 0,
