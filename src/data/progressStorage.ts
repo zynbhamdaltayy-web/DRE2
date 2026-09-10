@@ -1,10 +1,7 @@
 import {
-  getProgressStats,
   updateStreak,
   type StreakData,
 } from "./progress";
-
-import type { AppState } from "../types";
 
 const STORAGE_KEY =
   "dre2learn-progress";
@@ -128,8 +125,8 @@ export function registerProgressActivity(
    * updateStreak() works with AppState,
    * so we create a minimal compatible state.
    */
-  const streakState: AppState = {
-    page: "home",
+  const streakState = {
+    page: "home" as const,
     user: null,
 
     vocabulary: [],
@@ -140,9 +137,9 @@ export function registerProgressActivity(
 
     currentArticleId: null,
 
-    selectedLibraryLevel: "A1",
+    selectedLibraryLevel: "A1" as const,
     selectedTopic: "Daily Life",
-    selectedPracticeLevel: "A1",
+    selectedPracticeLevel: "A1" as const,
 
     isAuthenticated: false,
 
@@ -238,57 +235,8 @@ export function resetDailyProgress(): ProgressStorageData {
   return data;
 }
 
-export function getStoredProgressSummary() {
-  const data = readData();
-
-  const state: AppState = {
-    page: "home",
-    user: null,
-
-    vocabulary: [],
-    completedArticles: [],
-
-    practiceScore: 0,
-    practiceAnswered: 0,
-
-    currentArticleId: null,
-
-    selectedLibraryLevel: "A1",
-    selectedTopic: "Daily Life",
-    selectedPracticeLevel: "A1",
-
-    isAuthenticated: false,
-
-    totalXp: data.dailyXp,
-
-    articlesRead: 0,
-    vocabularyLearned: 0,
-    practiceCompleted: 0,
-    roomsJoined: 0,
-    cardsCollected: 0,
-
-    levelTestScore: 0,
-    levelTestTotal: 0,
-
-    progress: {
-      currentStreak:
-        data.currentStreak,
-
-      longestStreak:
-        data.longestStreak,
-
-      lastActiveDate:
-        data.lastActiveDate ?? "",
-
-      dailyXp:
-        data.dailyXp,
-
-      dailyGoal:
-        data.dailyGoal,
-    },
-  };
-
-  return getProgressStats(state);
+export function getStoredProgressSummary(): ProgressStorageData {
+  return readData();
 }
 
 export function clearProgressStorage(): void {
@@ -302,9 +250,10 @@ export function initializeProgressStorage(): void {
     writeData(DEFAULT_DATA);
   }
 }
-    
       
+      
+    
+  
   
 
-  
-  
+    
