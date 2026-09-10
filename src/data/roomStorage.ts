@@ -14,8 +14,10 @@ import {
   canUseRoomCamera,
   canUseRoomMicrophone,
   canUseRoomScreenShare,
+  getRoomMediaPermissions,
   type Room,
   type RoomInput,
+  type RoomMediaPermissions,
 } from "./rooms";
 
 import type { AvatarGender } from "../types";
@@ -66,12 +68,12 @@ function readData(): RoomStorageData {
     return {
       rooms:
         Array.isArray(value.rooms)
-          ? value.rooms.map(
-              (room) =>
+          ? value.rooms
+              .map((room) =>
                 normalizeRoom(
                   room,
                 ),
-            )
+              )
           : [],
     };
   } catch {
@@ -181,10 +183,24 @@ export function joinStoredRoom(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedUserId =
+    userId.trim();
+
+  if (
+    !normalizedRoomId ||
+    !normalizedUserId
+  ) {
+    return null;
+  }
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -194,7 +210,7 @@ export function joinStoredRoom(
   const updated =
     joinRoom(
       room,
-      userId,
+      normalizedUserId,
       userGender,
     );
 
@@ -204,14 +220,14 @@ export function joinStoredRoom(
    */
   const userAlreadyParticipating =
     room.participantIds.includes(
-      userId,
+      normalizedUserId,
     );
 
   const successfullyJoined =
     userAlreadyParticipating ||
     (
       updated.participantIds.includes(
-        userId,
+        normalizedUserId,
       ) &&
       updated.participantIds.length >
         room.participantIds.length
@@ -224,7 +240,8 @@ export function joinStoredRoom(
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -244,10 +261,24 @@ export function leaveStoredRoom(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedUserId =
+    userId.trim();
+
+  if (
+    !normalizedRoomId ||
+    !normalizedUserId
+  ) {
+    return null;
+  }
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -256,22 +287,32 @@ export function leaveStoredRoom(
 
   if (
     !room.participantIds.includes(
-      userId,
+      normalizedUserId,
     )
   ) {
     return room;
   }
 
+  /**
+   * leaveRoom() handles:
+   *
+   * - normal participant leaving
+   * - host leaving
+   * - automatic host transfer
+   * - cleaning individual permissions
+   * - ending the room when nobody remains
+   */
   const updated =
     leaveRoom(
       room,
-      userId,
+      normalizedUserId,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -285,19 +326,30 @@ export function leaveStoredRoom(
 // END ROOM
 // ======================================================
 
-/**
- * Only the room host can end the room.
- */
 export function endStoredRoom(
   roomId: string,
   requesterId: string,
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedRequesterId =
+    requesterId.trim();
+
+  if (
+    !normalizedRoomId ||
+    !normalizedRequesterId
+  ) {
+    return null;
+  }
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -307,7 +359,7 @@ export function endStoredRoom(
   if (
     !isRoomHost(
       room,
-      requesterId,
+      normalizedRequesterId,
     )
   ) {
     return null;
@@ -316,13 +368,14 @@ export function endStoredRoom(
   const updated =
     endRoom(
       room,
-      requesterId,
+      normalizedRequesterId,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -336,10 +389,6 @@ export function endStoredRoom(
 // OWNER — GLOBAL CAMERA
 // ======================================================
 
-/**
- * The room host enables or disables
- * camera access for everyone.
- */
 export function setStoredRoomCameraEnabled(
   roomId: string,
   requesterId: string,
@@ -347,10 +396,17 @@ export function setStoredRoomCameraEnabled(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedRequesterId =
+    requesterId.trim();
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -360,7 +416,7 @@ export function setStoredRoomCameraEnabled(
   if (
     !isRoomHost(
       room,
-      requesterId,
+      normalizedRequesterId,
     )
   ) {
     return null;
@@ -369,14 +425,15 @@ export function setStoredRoomCameraEnabled(
   const updated =
     setRoomCameraEnabled(
       room,
-      requesterId,
+      normalizedRequesterId,
       enabled,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -390,10 +447,6 @@ export function setStoredRoomCameraEnabled(
 // OWNER — GLOBAL MICROPHONE
 // ======================================================
 
-/**
- * The room host enables or disables
- * microphone access for everyone.
- */
 export function setStoredRoomMicrophoneEnabled(
   roomId: string,
   requesterId: string,
@@ -401,10 +454,17 @@ export function setStoredRoomMicrophoneEnabled(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedRequesterId =
+    requesterId.trim();
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -414,7 +474,7 @@ export function setStoredRoomMicrophoneEnabled(
   if (
     !isRoomHost(
       room,
-      requesterId,
+      normalizedRequesterId,
     )
   ) {
     return null;
@@ -423,14 +483,15 @@ export function setStoredRoomMicrophoneEnabled(
   const updated =
     setRoomMicrophoneEnabled(
       room,
-      requesterId,
+      normalizedRequesterId,
       enabled,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -444,10 +505,6 @@ export function setStoredRoomMicrophoneEnabled(
 // OWNER — GLOBAL SCREEN SHARE
 // ======================================================
 
-/**
- * The room host enables or disables
- * screen sharing for everyone.
- */
 export function setStoredRoomScreenShareEnabled(
   roomId: string,
   requesterId: string,
@@ -455,10 +512,17 @@ export function setStoredRoomScreenShareEnabled(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedRequesterId =
+    requesterId.trim();
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -468,7 +532,7 @@ export function setStoredRoomScreenShareEnabled(
   if (
     !isRoomHost(
       room,
-      requesterId,
+      normalizedRequesterId,
     )
   ) {
     return null;
@@ -477,14 +541,15 @@ export function setStoredRoomScreenShareEnabled(
   const updated =
     setRoomScreenShareEnabled(
       room,
-      requesterId,
+      normalizedRequesterId,
       enabled,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -498,10 +563,6 @@ export function setStoredRoomScreenShareEnabled(
 // OWNER — INDIVIDUAL CAMERA
 // ======================================================
 
-/**
- * The room host can disable or enable
- * the camera of one participant.
- */
 export function setStoredParticipantCameraEnabled(
   roomId: string,
   requesterId: string,
@@ -510,10 +571,20 @@ export function setStoredParticipantCameraEnabled(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedRequesterId =
+    requesterId.trim();
+
+  const normalizedParticipantId =
+    participantId.trim();
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -523,7 +594,7 @@ export function setStoredParticipantCameraEnabled(
   if (
     !isRoomHost(
       room,
-      requesterId,
+      normalizedRequesterId,
     )
   ) {
     return null;
@@ -532,15 +603,16 @@ export function setStoredParticipantCameraEnabled(
   const updated =
     setParticipantCameraEnabled(
       room,
-      requesterId,
-      participantId,
+      normalizedRequesterId,
+      normalizedParticipantId,
       enabled,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -554,10 +626,6 @@ export function setStoredParticipantCameraEnabled(
 // OWNER — INDIVIDUAL MICROPHONE
 // ======================================================
 
-/**
- * The room host can disable or enable
- * the microphone of one participant.
- */
 export function setStoredParticipantMicrophoneEnabled(
   roomId: string,
   requesterId: string,
@@ -566,10 +634,20 @@ export function setStoredParticipantMicrophoneEnabled(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedRequesterId =
+    requesterId.trim();
+
+  const normalizedParticipantId =
+    participantId.trim();
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -579,7 +657,7 @@ export function setStoredParticipantMicrophoneEnabled(
   if (
     !isRoomHost(
       room,
-      requesterId,
+      normalizedRequesterId,
     )
   ) {
     return null;
@@ -588,15 +666,16 @@ export function setStoredParticipantMicrophoneEnabled(
   const updated =
     setParticipantMicrophoneEnabled(
       room,
-      requesterId,
-      participantId,
+      normalizedRequesterId,
+      normalizedParticipantId,
       enabled,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -610,10 +689,6 @@ export function setStoredParticipantMicrophoneEnabled(
 // OWNER — INDIVIDUAL SCREEN SHARE
 // ======================================================
 
-/**
- * The room host can disable or enable
- * screen sharing for one participant.
- */
 export function setStoredParticipantScreenShareEnabled(
   roomId: string,
   requesterId: string,
@@ -622,10 +697,20 @@ export function setStoredParticipantScreenShareEnabled(
 ): Room | null {
   const data = readData();
 
+  const normalizedRoomId =
+    roomId.trim();
+
+  const normalizedRequesterId =
+    requesterId.trim();
+
+  const normalizedParticipantId =
+    participantId.trim();
+
   const room =
     data.rooms.find(
       (item) =>
-        item.id === roomId,
+        item.id ===
+        normalizedRoomId,
     );
 
   if (!room) {
@@ -635,7 +720,7 @@ export function setStoredParticipantScreenShareEnabled(
   if (
     !isRoomHost(
       room,
-      requesterId,
+      normalizedRequesterId,
     )
   ) {
     return null;
@@ -644,15 +729,16 @@ export function setStoredParticipantScreenShareEnabled(
   const updated =
     setParticipantScreenShareEnabled(
       room,
-      requesterId,
-      participantId,
+      normalizedRequesterId,
+      normalizedParticipantId,
       enabled,
     );
 
   data.rooms =
     data.rooms.map(
       (item) =>
-        item.id === roomId
+        item.id ===
+        normalizedRoomId
           ? updated
           : item,
     );
@@ -718,13 +804,58 @@ export function canStoredUserUseScreenShare(
 }
 
 // ======================================================
+// ALL MEDIA PERMISSIONS
+// ======================================================
+
+/**
+ * Returns the three current room permissions
+ * for a user.
+ *
+ * This is the preferred storage-layer bridge
+ * for the PeerJS media layer.
+ */
+export function getStoredUserMediaPermissions(
+  roomId: string,
+  userId: string,
+): RoomMediaPermissions | null {
+  const room =
+    getRoomById(roomId);
+
+  if (!room) {
+    return null;
+  }
+
+  return getRoomMediaPermissions(
+    room,
+    userId,
+  );
+}
+
+// ======================================================
 // DELETE ROOM
 // ======================================================
 
+/**
+ * Deletes a room from local storage.
+ *
+ * IMPORTANT:
+ * This function is intentionally kept as a low-level
+ * local-storage operation for compatibility.
+ *
+ * It must NOT be treated as the security mechanism
+ * for deleting a real production room.
+ */
 export function deleteRoom(
   roomId: string,
 ): boolean {
   const data = readData();
+
+  const normalizedRoomId =
+    roomId.trim();
+
+  if (!normalizedRoomId) {
+    return false;
+  }
 
   const before =
     data.rooms.length;
@@ -732,7 +863,8 @@ export function deleteRoom(
   data.rooms =
     data.rooms.filter(
       (room) =>
-        room.id !== roomId,
+        room.id !==
+        normalizedRoomId,
     );
 
   if (
@@ -745,6 +877,38 @@ export function deleteRoom(
   writeData(data);
 
   return true;
+}
+
+/**
+ * Safer application-level deletion helper.
+ *
+ * Only the current host can delete/end-remove
+ * the room through this helper.
+ *
+ * Real production authorization must still be
+ * enforced by the backend/Firebase.
+ */
+export function deleteStoredRoomByHost(
+  roomId: string,
+  requesterId: string,
+): boolean {
+  const room =
+    getRoomById(roomId);
+
+  if (!room) {
+    return false;
+  }
+
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return false;
+  }
+
+  return deleteRoom(roomId);
 }
 
 // ======================================================
@@ -772,8 +936,3 @@ export function initializeRoomStorage(): void {
     );
   }
 }
-    
-  
-
-  
-
