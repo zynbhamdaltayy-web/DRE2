@@ -1,48 +1,55 @@
-import {
-  DRE2LEARN_OWNER_ID,
-} from "./accounts";
+import type { Account } from "./accounts";
+
+export type UpdateType =
+  | "feature"
+  | "improvement"
+  | "maintenance"
+  | "announcement"
+  | "security"
+  | "education";
 
 export type UpdateStatus =
   | "draft"
   | "published"
   | "archived";
 
-export type UpdateCategory =
-  | "announcement"
-  | "feature"
-  | "maintenance"
-  | "community"
-  | "official";
-
 export interface AppUpdate {
   id: string;
   title: string;
-  content: string;
-  category: UpdateCategory;
+  message: string;
+  type: UpdateType;
   status: UpdateStatus;
-  authorId: string;
   createdAt: string;
-  publishedAt?: string;
   updatedAt: string;
-  pinned: boolean;
+  publishedAt?: string;
+  authorId: string;
+  featured: boolean;
+  version?: string;
+  actionUrl?: string;
+  metadata?: Record<string, string>;
 }
 
-export interface CreateUpdateInput {
+export interface AppUpdateInput {
   title: string;
-  content: string;
-  category?: UpdateCategory;
-  authorId?: string;
+  message: string;
+  type: UpdateType;
+  authorId: string;
+  version?: string;
+  actionUrl?: string;
+  featured?: boolean;
+  metadata?: Record<string, string>;
 }
 
-export const UPDATE_CATEGORY_LABELS: Record<
-  UpdateCategory,
+export const UPDATE_TYPE_LABELS: Record<
+  UpdateType,
   string
 > = {
-  announcement: "Announcement",
   feature: "New feature",
+  improvement: "Improvement",
   maintenance: "Maintenance",
-  community: "Community",
-  official: "Official",
+  announcement: "Announcement",
+  security: "Security",
+  education: "Learning update",
 };
 
 export const UPDATE_STATUS_LABELS: Record<
@@ -54,79 +61,75 @@ export const UPDATE_STATUS_LABELS: Record<
   archived: "Archived",
 };
 
-function createId(): string {
-  return `update-${Date.now()}-${Math.random()
+function createId(prefix = "update"): string {
+  return `${prefix}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
 }
 
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function now(): string {
+  return new Date().toISOString();
+}
+
 export function createUpdate(
-  input: CreateUpdateInput,
+  input: AppUpdateInput,
 ): AppUpdate {
-  const now = new Date().toISOString();
+  const timestamp = now();
 
   return {
     id: createId(),
-    title: input.title.trim(),
-    content: input.content.trim(),
-    category: input.category ?? "official",
+    title: cleanString(input.title),
+    message: cleanString(input.message),
+    type: input.type,
     status: "draft",
-    authorId:
-      input.authorId?.trim() || DRE2LEARN_OWNER_ID,
-    createdAt: now,
-    updatedAt: now,
-    pinned: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    authorId: cleanString(input.authorId),
+    featured: input.featured ?? false,
+    version: cleanString(input.version) || undefined,
+    actionUrl:
+      cleanString(input.actionUrl) || undefined,
+    metadata: input.metadata,
   };
 }
 
-export function validateUpdate(
-  update: Partial<AppUpdate>,
-): string[] {
-  const errors: string[] = [];
-
-  if (!update.title?.trim()) {
-    errors.push("Title is required.");
-  }
-
-  if (!update.content?.trim()) {
-    errors.push("Content is required.");
-  }
-
-  if (!update.authorId?.trim()) {
-    errors.push("Author is required.");
-  }
-
-  return errors;
-}
-
-export function updateDraft(
+export function normalizeUpdate(
   update: AppUpdate,
-  changes: Partial<
-    Pick<AppUpdate, "title" | "content" | "category">
-  >,
 ): AppUpdate {
+  const timestamp = now();
+
   return {
     ...update,
-    title:
-      changes.title?.trim() ?? update.title,
-    content:
-      changes.content?.trim() ?? update.content,
-    category:
-      changes.category ?? update.category,
-    updatedAt: new Date().toISOString(),
+    id: cleanString(update.id) || createId(),
+    title: cleanString(update.title),
+    message: cleanString(update.message),
+    authorId: cleanString(update.authorId),
+    createdAt:
+      cleanString(update.createdAt) || timestamp,
+    updatedAt:
+      cleanString(update.updatedAt) || timestamp,
+    featured: Boolean(update.featured),
+    version:
+      cleanString(update.version) || undefined,
+    actionUrl:
+      cleanString(update.actionUrl) || undefined,
   };
 }
 
 export function publishUpdate(
   update: AppUpdate,
 ): AppUpdate {
-  const now = new Date().toISOString();
+  const timestamp = now();
 
   return {
     ...update,
     status: "published",
-    publishedAt: now,
-    updatedAt: now,
+    publishedAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
@@ -136,27 +139,65 @@ export function archiveUpdate(
   return {
     ...update,
     status: "archived",
-    updatedAt: new Date().toISOString(),
+    updatedAt: now(),
   };
 }
 
-export function pinUpdate(
+export function restoreUpdate(
   update: AppUpdate,
 ): AppUpdate {
   return {
     ...update,
-    pinned: true,
-    updatedAt: new Date().toISOString(),
+    status: "draft",
+    publishedAt: undefined,
+    updatedAt: now(),
   };
 }
 
-export function unpinUpdate(
+export function setUpdateFeatured(
   update: AppUpdate,
+  featured: boolean,
 ): AppUpdate {
   return {
     ...update,
-    pinned: false,
-    updatedAt: new Date().toISOString(),
+    featured,
+    updatedAt: now(),
+  };
+}
+
+export function updateUpdateContent(
+  update: AppUpdate,
+  changes: Partial<
+    Pick<
+      AppUpdate,
+      | "title"
+      | "message"
+      | "type"
+      | "version"
+      | "actionUrl"
+    >
+  >,
+): AppUpdate {
+  return {
+    ...update,
+    title:
+      changes.title !== undefined
+        ? cleanString(changes.title)
+        : update.title,
+    message:
+      changes.message !== undefined
+        ? cleanString(changes.message)
+        : update.message,
+    type: changes.type ?? update.type,
+    version:
+      changes.version !== undefined
+        ? cleanString(changes.version) || undefined
+        : update.version,
+    actionUrl:
+      changes.actionUrl !== undefined
+        ? cleanString(changes.actionUrl) || undefined
+        : update.actionUrl,
+    updatedAt: now(),
   };
 }
 
@@ -164,54 +205,155 @@ export function getPublishedUpdates(
   updates: AppUpdate[],
 ): AppUpdate[] {
   return updates
-    .filter((update) => update.status === "published")
-    .sort((a, b) => {
-      if (a.pinned !== b.pinned) {
-        return a.pinned ? -1 : 1;
-      }
-
-      return (
+    .filter(
+      (update) => update.status === "published",
+    )
+    .sort(
+      (a, b) =>
         new Date(
-          b.publishedAt ?? b.createdAt,
+          b.publishedAt ?? b.updatedAt,
         ).getTime() -
         new Date(
-          a.publishedAt ?? a.createdAt,
-        ).getTime()
-      );
-    });
+          a.publishedAt ?? a.updatedAt,
+        ).getTime(),
+    );
 }
 
 export function getDraftUpdates(
   updates: AppUpdate[],
 ): AppUpdate[] {
-  return updates.filter(
-    (update) => update.status === "draft",
+  return updates
+    .filter((update) => update.status === "draft")
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() -
+        new Date(a.updatedAt).getTime(),
+    );
+}
+
+export function getArchivedUpdates(
+  updates: AppUpdate[],
+): AppUpdate[] {
+  return updates
+    .filter(
+      (update) => update.status === "archived",
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() -
+        new Date(a.updatedAt).getTime(),
+    );
+}
+
+export function getFeaturedUpdates(
+  updates: AppUpdate[],
+): AppUpdate[] {
+  return getPublishedUpdates(updates).filter(
+    (update) => update.featured,
   );
 }
 
-export function getUpdateById(
+export function getUpdatesByType(
   updates: AppUpdate[],
-  id: string,
-): AppUpdate | null {
-  return (
-    updates.find((update) => update.id === id) ??
-    null
+  type: UpdateType,
+): AppUpdate[] {
+  return getPublishedUpdates(updates).filter(
+    (update) => update.type === type,
   );
+}
+
+export function getUpdatesByAuthor(
+  updates: AppUpdate[],
+  authorId: string,
+): AppUpdate[] {
+  return updates
+    .filter(
+      (update) => update.authorId === authorId,
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() -
+        new Date(a.updatedAt).getTime(),
+    );
 }
 
 export function searchUpdates(
   updates: AppUpdate[],
   query: string,
 ): AppUpdate[] {
-  const normalized = query.trim().toLowerCase();
+  const normalizedQuery =
+    cleanString(query).toLowerCase();
 
-  if (!normalized) {
+  if (!normalizedQuery) {
     return getPublishedUpdates(updates);
   }
 
   return getPublishedUpdates(updates).filter(
     (update) =>
-      update.title.toLowerCase().includes(normalized) ||
-      update.content.toLowerCase().includes(normalized),
+      update.title
+        .toLowerCase()
+        .includes(normalizedQuery) ||
+      update.message
+        .toLowerCase()
+        .includes(normalizedQuery),
   );
 }
+
+export function canManageUpdates(
+  account: Account,
+): boolean {
+  return (
+    account.status === "active" &&
+    (account.role === "owner" ||
+      account.role === "admin") &&
+    account.permissions.publishUpdates
+  );
+}
+
+export function validateUpdateInput(
+  input: AppUpdateInput,
+): string[] {
+  const errors: string[] = [];
+
+  if (!cleanString(input.title)) {
+    errors.push("Update title is required.");
+  }
+
+  if (!cleanString(input.message)) {
+    errors.push("Update message is required.");
+  }
+
+  if (!cleanString(input.authorId)) {
+    errors.push("Author ID is required.");
+  }
+
+  if (cleanString(input.title).length > 150) {
+    errors.push(
+      "Update title cannot exceed 150 characters.",
+    );
+  }
+
+  if (cleanString(input.message).length > 5000) {
+    errors.push(
+      "Update message cannot exceed 5000 characters.",
+    );
+  }
+
+  return errors;
+}
+  
+
+  
+    
+  
+    
+  
+  
+  
+  
+  
+
+  
+    
+        
+    
