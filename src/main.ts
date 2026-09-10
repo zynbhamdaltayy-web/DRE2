@@ -1,44 +1,82 @@
 import "./style.css";
-import Peer, { MediaConnection } from "peerjs";
 
-type Page =
-  | "welcome"
-  | "auth"
-  | "signup"
-  | "login"
-  | "avatar"
-  | "home"
-  | "library"
-  | "article"
-  | "vocabulary"
-  | "practice"
-  | "rooms"
-  | "games"
-  | "progress"
-  | "profile";
+import type {
+  AppState,
+  Article,
+  Level,
+  LevelTestAnswer,
+  LevelTestQuestion,
+  Page,
+  VocabularyWord,
+  UserProfile,
+} from "./types";
 
-type Level = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+import { defaultAvatar, createDefaultState } from "./state";
 
-type Avatar = {
-  skin: string;
-  eyes: string;
-  hair: string;
-  shirt: string;
-};
+import {
+  saveState,
+  loadStoredState,
+  clearStoredState,
+  addXP,
+  markArticleCompleted,
+  addVocabularyWord,
+  markPracticeCompleted,
+  markRoomJoined,
+} from "./storage";
 
-type Article = {
-  id: string;
-  level: Level;
-  topic: string;
-  title: string;
-  content: string[];
-};
+import { sidebarMarkup } from "./sidebar";
+import { logoMarkup } from "./logo";
+import { avatarMarkup } from "./avatar";
+import { welcomePageMarkup } from "./welcome";
+import { signupPageMarkup } from "./signup";
+import { loginPageMarkup } from "./login";
 
-type PracticeQuestion = {
-  question: string;
-  answers: string[];
-  correct: number;
-};
+import {
+  getLibraryArticles,
+  getLibraryTopics,
+  LIBRARY_LEVELS,
+  type LibraryArticle,
+} from "./data/library";
+
+import {
+  getProgressStatistics,
+  getLevelFromXp,
+  getNextLevel,
+  getXpToNextLevel,
+  getLevelProgress,
+  getDailyGoalProgress,
+  getStreakSummary,
+  getProgressStats,
+} from "./data/progress";
+
+import {
+  levelTestQuestions,
+  getNextAdaptiveQuestion,
+  createAdaptiveState,
+  recordAdaptiveAnswer,
+  calculateLevelTestResult,
+  shouldFinishTest,
+} from "./data/levelTest";
+
+import {
+  getAllRooms,
+  createAndSaveRoom,
+  joinStoredRoom,
+  leaveStoredRoom,
+} from "./data/roomStorage";
+
+import type {
+  RoomGender,
+  RoomType,
+} from "./data/rooms";
+
+import {
+  getAllConversations,
+  getAllMessages,
+  getAllMessageRequests,
+} from "./data/messageStorage";
+
+import { createGoogleTranslateUrl } from "./data/library";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -46,124 +84,28 @@ if (!app) {
   throw new Error("App container not found.");
 }
 
-const STORAGE_KEY = "dre2learn_state";
-
-const defaultAvatar: Avatar = {
-  skin: "#F2C7A5",
-  eyes: "#4A3025",
-  hair: "#3A2418",
-  shirt: "#F6A27A",
-};
-
-const state = {
-  page: "welcome" as Page,
-  name: "",
-  email: "",
-  level: "B1" as Level,
-  avatar: { ...defaultAvatar },
-  vocabulary: [] as string[],
-  completedArticles: [] as string[],
-  practiceScore: 0,
-  currentArticleId: "",
-  selectedLibraryLevel: "ALL" as Level | "ALL",
-  selectedTopic: "ALL",
-};
-
-const articles: Article[] = [
-  {
-    id: "daily-routines",
-    level: "A2",
-    topic: "Daily Life",
-    title: "A Simple Daily Routine",
-    content: [
-      "Every morning, Sara wakes up early and opens the window.",
-      "She drinks a glass of water and prepares a simple breakfast.",
-      "After breakfast, she studies English for thirty minutes.",
-      "In the afternoon, she usually helps her family and reads a book.",
-      "In the evening, she prepares her school bag for the next day.",
-    ],
-  },
-  {
-    id: "learning-languages",
-    level: "B1",
-    topic: "Languages",
-    title: "Why Learning Languages Matters",
-    content: [
-      "Learning a new language can change the way we understand the world.",
-      "When people learn another language, they often discover new cultures and different ways of thinking.",
-      "Language learning also gives people more opportunities to communicate with others.",
-      "The most important part is to practice regularly and not be afraid of making mistakes.",
-      "Small improvements every day can lead to strong results over time.",
-    ],
-  },
-  {
-    id: "technology",
-    level: "B2",
-    topic: "Technology",
-    title: "Technology in Everyday Life",
-    content: [
-      "Technology has become an important part of everyday life.",
-      "People use digital devices to communicate, study, work, and find information.",
-      "Technology can save time, but it can also become distracting when people use it without limits.",
-      "For this reason, learning how to use technology responsibly is increasingly important.",
-    ],
-  },
+const LEVELS: Level[] = [
+  "A1",
+  "A2",
+  "B1",
+  "B2",
+  "C1",
+  "C2",
 ];
 
-const practiceQuestions: PracticeQuestion[] = [
-  {
-    question: "Choose the correct sentence.",
-    answers: [
-      "She go to school every day.",
-      "She goes to school every day.",
-      "She going to school every day.",
-      "She gone to school every day.",
-    ],
-    correct: 1,
-  },
-  {
-    question: "Choose the correct word: I have lived here ___ 2022.",
-    answers: ["for", "since", "during", "from"],
-    correct: 1,
-  },
-  {
-    question: "Choose the closest meaning of “improve”.",
-    answers: ["to get better", "to disappear", "to forget", "to stop"],
-    correct: 0,
-  },
-];
+let state: AppState =
+  loadStoredState() ?? createDefaultState();
 
-let currentPracticeIndex = 0;
+let practiceIndex = 0;
 let practiceAnswered = false;
-let lastAnswer = -1;
 
-/* =========================================================
-   REAL ROOMS / WEBRTC STATE
-   ========================================================= */
+let levelTestIndex = 0;
+let levelTestAnswers: LevelTestAnswer[] = [];
 
-let peer: Peer | null = null;
-let activeCall: MediaConnection | null = null;
+let adaptiveState = createAdaptiveState();
 
-let localMediaStream: MediaStream | null = null;
-let screenStream: MediaStream | null = null;
-
-let remoteStream: MediaStream | null = null;
-
-let currentRoomPeerId = "";
-let connectedRoomPeerId = "";
-
-let isRoomConnected = false;
-let isScreenSharing = false;
-
-/*
-  This keeps the room connection alive while the user navigates
-  inside DRE2learn.
-*/
-
-let roomStatusMessage = "Not connected";
-
-function escapeHtml(value: string): string {
-  return value
+function esc(value: unknown): string {
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -171,891 +113,436 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
-function saveState(): void {
-  const data = {
-    name: state.name,
-    email: state.email,
-    level: state.level,
-    avatar: state.avatar,
-    vocabulary: state.vocabulary,
-    completedArticles: state.completedArticles,
-    practiceScore: state.practiceScore,
+function currentUser(): UserProfile | null {
+  return state.user;
+}
+
+function userId(): string {
+  return state.user?.email || "local-user";
+}
+
+function persist(): void {
+  state = {
+    ...state,
+    totalXp: Math.max(
+      0,
+      state.totalXp || state.user?.xp || 0,
+    ),
   };
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-function loadState(): void {
-  const saved = localStorage.getItem(STORAGE_KEY);
-
-  if (!saved) return;
-
-  try {
-    const data = JSON.parse(saved);
-
-    state.name = typeof data.name === "string" ? data.name : "";
-    state.email = typeof data.email === "string" ? data.email : "";
-    state.level = isLevel(data.level) ? data.level : "B1";
-
-    if (data.avatar) {
-      state.avatar = {
-        skin: data.avatar.skin || defaultAvatar.skin,
-        eyes: data.avatar.eyes || defaultAvatar.eyes,
-        hair: data.avatar.hair || defaultAvatar.hair,
-        shirt: data.avatar.shirt || defaultAvatar.shirt,
-      };
-    }
-
-    state.vocabulary = Array.isArray(data.vocabulary)
-      ? data.vocabulary
-      : [];
-
-    state.completedArticles = Array.isArray(
-      data.completedArticles,
-    )
-      ? data.completedArticles
-      : [];
-
-    state.practiceScore =
-      typeof data.practiceScore === "number"
-        ? data.practiceScore
-        : 0;
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-}
-
-function isLevel(value: unknown): value is Level {
-  return (
-    value === "A1" ||
-    value === "A2" ||
-    value === "B1" ||
-    value === "B2" ||
-    value === "C1" ||
-    value === "C2"
-  );
+  saveState(state);
 }
 
 function navigate(page: Page): void {
   state.page = page;
+
+  persist();
+
   render();
 
   window.scrollTo({
     top: 0,
     behavior: "smooth",
   });
+}
 
-  /*
-    If we return to Rooms after a connection already exists,
-    restore the video streams.
-  */
-  if (page === "rooms") {
-    window.setTimeout(() => {
-      attachCurrentStreamsToRoomUI();
-    }, 50);
+function shell(content: string): string {
+  const authenticated =
+    state.isAuthenticated && !!state.user;
+
+  if (!authenticated) {
+    return content;
   }
-}
 
-function showToast(message: string): void {
-  const existing = document.querySelector(".toast");
-
-  existing?.remove();
-
-  const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent = message;
-
-  document.body.appendChild(toast);
-
-  window.setTimeout(() => {
-    toast.remove();
-  }, 2200);
-}
-
-function getInitials(name: string): string {
-  const trimmed = name.trim();
-
-  if (!trimmed) return "D";
-
-  return trimmed
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) =>
-      word.charAt(0).toUpperCase(),
-    )
-    .join("");
-}
-
-function avatarSvg(size = 180): string {
-  const { skin, eyes, hair, shirt } = state.avatar;
-
-  return `
-    <svg
-      class="avatar-svg"
-      width="${size}"
-      height="${size}"
-      viewBox="0 0 180 180"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="DRE2learn avatar"
-    >
-      <circle cx="90" cy="90" r="84" fill="#FFF7F2"/>
-
-      <path
-        d="M49 78C49 47 67 29 90 29C113 29 131 47 131 78V108C131 136 113 153 90 153C67 153 49 136 49 108V78Z"
-        fill="${skin}"
-      />
-
-      <path
-        d="M46 79C44 45 63 22 91 22C120 22 137 46 134 81C124 68 116 61 101 57C84 53 69 59 55 73L46 79Z"
-        fill="${hair}"
-      />
-
-      <circle cx="74" cy="91" r="5" fill="${eyes}"/>
-      <circle cx="106" cy="91" r="5" fill="${eyes}"/>
-
-      <path
-        d="M78 116C85 121 95 121 102 116"
-        fill="none"
-        stroke="${eyes}"
-        stroke-width="4"
-        stroke-linecap="round"
-      />
-
-      <path
-        d="M57 131C67 124 78 122 90 122C102 122 113 124 123 131L136 170H44L57 131Z"
-        fill="${shirt}"
-      />
-
-      <circle cx="90" cy="143" r="13" fill="#FFF7F2"/>
-
-      <path
-        d="M84 143L88 147L97 138"
-        fill="none"
-        stroke="${shirt}"
-        stroke-width="4"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
-  `;
-}
-
-function logo(): string {
-  return `
-    <div class="brand">
-      <div class="brand-mark">D</div>
-      <span>DRE2learn</span>
-    </div>
-  `;
-}
-
-function renderWelcome(): string {
-  return `
-    <main class="welcome-page page">
-      <div class="welcome-card">
-        <div class="welcome-logo">
-          ${logo()}
-        </div>
-
-        <div class="welcome-illustration">
-          ${avatarSvg(210)}
-        </div>
-
-        <p class="eyebrow">LEARN • PRACTICE • SPEAK</p>
-
-        <h1>Learn English your way.</h1>
-
-        <p class="welcome-text">
-          Read, practice, save new words, and speak with people.
-        </p>
-
-        <button class="primary-btn large-btn" data-action="start">
-          Get Started
-        </button>
-
-        <button class="text-btn" data-action="login">
-          I already have an account
-        </button>
-      </div>
-    </main>
-  `;
-}
-
-function renderAuth(): string {
-  return `
-    <main class="auth-page page">
-      <div class="auth-card">
-        ${logo()}
-
-        <div class="auth-icon">✨</div>
-
-        <h1>Welcome to DRE2learn</h1>
-
-        <p>
-          Start your English learning journey.
-        </p>
-
-        <button class="primary-btn" data-action="signup">
-          Create account
-        </button>
-
-        <button class="secondary-btn" data-action="login">
-          Log in
-        </button>
-
-        <button class="text-btn" data-action="welcome">
-          Back
-        </button>
-      </div>
-    </main>
-  `;
-}
-
-function renderSignup(): string {
-  return `
-    <main class="form-page page">
-      <div class="form-card">
-        ${logo()}
-
-        <h1>Create your account</h1>
-
-        <p class="form-intro">
-          Just a few details to get started.
-        </p>
-
-        <form id="signupForm">
-          <label for="signupName">Name</label>
-
-          <input
-            id="signupName"
-            name="name"
-            type="text"
-            placeholder="Your name"
-            autocomplete="name"
-            required
-          />
-
-          <label for="signupEmail">Email</label>
-
-          <input
-            id="signupEmail"
-            name="email"
-            type="email"
-            placeholder="you@example.com"
-            autocomplete="email"
-            required
-          />
-
-          <label for="signupLevel">English level</label>
-
-          <select id="signupLevel" name="level">
-            ${renderLevelOptions()}
-          </select>
-
-          <label for="signupPassword">Password</label>
-
-          <input
-            id="signupPassword"
-            name="password"
-            type="password"
-            placeholder="Create a password"
-            autocomplete="new-password"
-            minlength="6"
-            required
-          />
-
-          <button class="primary-btn" type="submit">
-            Continue
-          </button>
-        </form>
-
-        <button class="text-btn" data-action="auth">
-          Back
-        </button>
-      </div>
-    </main>
-  `;
-}
-
-function renderLogin(): string {
-  return `
-    <main class="form-page page">
-      <div class="form-card">
-        ${logo()}
-
-        <h1>Welcome back</h1>
-
-        <p class="form-intro">
-          Continue your learning journey.
-        </p>
-
-        <form id="loginForm">
-          <label for="loginEmail">Email</label>
-
-          <input
-            id="loginEmail"
-            name="email"
-            type="email"
-            placeholder="you@example.com"
-            autocomplete="email"
-            required
-          />
-
-          <label for="loginPassword">Password</label>
-
-          <input
-            id="loginPassword"
-            name="password"
-            type="password"
-            placeholder="Your password"
-            autocomplete="current-password"
-            required
-          />
-
-          <button class="primary-btn" type="submit">
-            Log in
-          </button>
-        </form>
-
-        <button class="text-btn" data-action="auth">
-          Back
-        </button>
-      </div>
-    </main>
-  `;
-}
-
-function renderLevelOptions(): string {
-  return ["A1", "A2", "B1", "B2", "C1", "C2"]
-    .map(
-      (level) => `
-        <option
-          value="${level}"
-          ${state.level === level ? "selected" : ""}
-        >
-          ${level}
-        </option>
-      `,
-    )
-    .join("");
-}
-
-function renderAvatar(): string {
-  return `
-    <main class="avatar-page page">
-      <div class="avatar-card">
-        ${logo()}
-
-        <h1>Create your avatar</h1>
-
-        <p>
-          Choose your look. You can change it later.
-        </p>
-
-        <div class="avatar-preview">
-          ${avatarSvg(220)}
-        </div>
-
-        <div class="avatar-section">
-          <h3>Skin</h3>
-
-          <div class="choice-row">
-            ${renderColorChoices(
-              "skin",
-              [
-                "#F2C7A5",
-                "#D99A6C",
-                "#B96F45",
-                "#8B4F32",
-              ],
-            )}
-          </div>
-        </div>
-
-        <div class="avatar-section">
-          <h3>Eyes</h3>
-
-          <div class="choice-row">
-            ${renderColorChoices(
-              "eyes",
-              [
-                "#4A3025",
-                "#171717",
-                "#315C75",
-                "#3C6B3C",
-              ],
-            )}
-          </div>
-        </div>
-
-        <div class="avatar-section">
-          <h3>Hair</h3>
-
-          <div class="choice-row">
-            ${renderColorChoices(
-              "hair",
-              [
-                "#3A2418",
-                "#171717",
-                "#70452D",
-                "#B7773E",
-              ],
-            )}
-          </div>
-        </div>
-
-        <div class="avatar-section">
-          <h3>Top</h3>
-
-          <div class="choice-row">
-            ${renderColorChoices(
-              "shirt",
-              [
-                "#F6A27A",
-                "#F3C7B4",
-                "#A8C7D8",
-                "#A9BFA3",
-              ],
-            )}
-          </div>
-        </div>
-
-        <button class="primary-btn" data-action="saveAvatar">
-          Continue
-        </button>
-      </div>
-    </main>
-  `;
-}
-
-function renderColorChoices(
-  key: keyof Avatar,
-  colors: string[],
-): string {
-  return colors
-    .map(
-      (color) => `
-        <button
-          type="button"
-          class="color-choice ${
-            state.avatar[key] === color
-              ? "selected"
-              : ""
-          }"
-          style="background:${color}"
-          data-avatar-key="${key}"
-          data-avatar-color="${color}"
-          aria-label="Choose color"
-        ></button>
-      `,
-    )
-    .join("");
-}
-
-function renderShell(content: string): string {
   return `
     <div class="app-shell">
-      <header class="topbar">
-        <button
-          class="brand-button"
-          data-action="home"
-        >
-          ${logo()}
-        </button>
+      ${sidebarMarkup(state.page)}
 
-        <button
-          class="avatar-mini"
-          data-action="profile"
-        >
-          ${avatarSvg(48)}
-        </button>
-      </header>
+      <div class="app-main">
+        <header class="topbar">
+          <div class="topbar-mobile-brand">
+            ${logoMarkup(true)}
+          </div>
 
-      ${content}
+          <div class="topbar-spacer"></div>
 
-      ${renderBottomNav()}
+          <button
+            class="topbar-profile"
+            data-action="profile"
+            aria-label="Profile"
+          >
+            ${avatarMarkup(
+              state.user?.avatar ?? defaultAvatar,
+              42,
+            )}
+          </button>
+        </header>
+
+        <main class="page">
+          ${content}
+        </main>
+      </div>
     </div>
   `;
 }
 
-function renderBottomNav(): string {
-  const active = state.page;
-
+function pageHeader(
+  eyebrow: string,
+  title: string,
+  description = "",
+): string {
   return `
-    <nav class="bottom-nav">
-      <button
-        class="${active === "home" ? "active" : ""}"
-        data-action="home"
-      >
-        <span>⌂</span>
-        <small>Home</small>
-      </button>
+    <div class="page-header">
+      <div>
+        <div class="eyebrow">
+          ${esc(eyebrow)}
+        </div>
 
-      <button
-        class="${
-          active === "library" ||
-          active === "article"
-            ? "active"
-            : ""
-        }"
-        data-action="library"
-      >
-        <span>▤</span>
-        <small>Library</small>
-      </button>
+        <h1>
+          ${esc(title)}
+        </h1>
 
-      <button
-        class="${
-          active === "practice"
-            ? "active"
+        ${
+          description
+            ? `<p>${esc(description)}</p>`
             : ""
-        }"
-        data-action="practice"
-      >
-        <span>✓</span>
-        <small>Practice</small>
-      </button>
+        }
+      </div>
+    </div>
+  `;
+}
 
-      <button
-        class="${
-          active === "profile"
-            ? "active"
-            : ""
-        }"
-        data-action="profile"
-      >
-        <span>○</span>
-        <small>Profile</small>
-      </button>
-    </nav>
+function statCard(
+  label: string,
+  value: string | number,
+  detail: string,
+): string {
+  return `
+    <div class="stat-card">
+      <span class="stat-label">
+        ${esc(label)}
+      </span>
+
+      <strong>
+        ${esc(value)}
+      </strong>
+
+      <small>
+        ${esc(detail)}
+      </small>
+    </div>
   `;
 }
 
 function renderHome(): string {
-  const name = escapeHtml(
-    state.name || "Learner",
-  );
+  const user = currentUser();
 
-  return renderShell(`
-    <main class="home-page page">
-      <section class="home-header">
-        <div>
-          <p class="eyebrow">WELCOME BACK</p>
+  if (!user) {
+    return renderWelcomeScreen();
+  }
 
-          <h1>
-            Hi, ${name}! 👋
-          </h1>
+  const level = getLevelFromXp(state.totalXp);
 
-          <p>
-            What would you like to practice today?
-          </p>
-        </div>
+  const progress =
+    getLevelProgress(state.totalXp);
 
-        <div class="level-pill">
-          ${state.level}
-        </div>
-      </section>
+  const daily =
+    getDailyGoalProgress(state);
 
-      <section class="progress-card">
-        <div>
-          <span>Your progress</span>
+  const streak =
+    getStreakSummary(state);
 
-          <strong>
-            ${state.completedArticles.length}
-            articles completed
-          </strong>
-        </div>
+  const next =
+    getNextLevel(level);
+
+  return shell(`
+    ${pageHeader(
+      "DRE2learn",
+      `Welcome back, ${user.name || "Learner"}`,
+      "Learn languages, practice with others, and grow with a safe community.",
+    )}
+
+    <section class="hero-card">
+      <div>
+        <span class="hero-kicker">
+          Your learning path
+        </span>
+
+        <h2>
+          ${level}
+        </h2>
+
+        <p>
+          ${
+            next
+              ? `${getXpToNextLevel(
+                  state.totalXp,
+                )} XP to ${next}.`
+              : "You reached the highest level."
+          }
+        </p>
 
         <div class="progress-track">
-          <div
-            class="progress-fill"
-            style="width:${Math.min(
-              state.completedArticles.length * 20,
-              100,
-            )}%"
-          ></div>
+          <span
+            style="width:${progress}%"
+          ></span>
         </div>
-      </section>
 
-      <section class="feature-grid">
+        <small>
+          ${progress}% through your current level
+        </small>
+      </div>
+
+      <div class="hero-avatar">
+        ${avatarMarkup(user.avatar, 120)}
+      </div>
+    </section>
+
+    <section class="stats-grid">
+      ${statCard(
+        "XP",
+        state.totalXp,
+        "Total learning XP",
+      )}
+
+      ${statCard(
+        "Streak",
+        `${streak.currentStreak} days`,
+        "Keep your daily practice",
+      )}
+
+      ${statCard(
+        "Today",
+        `${daily.current}/${daily.goal}`,
+        daily.completed
+          ? "Goal completed"
+          : "Daily goal",
+      )}
+
+      ${statCard(
+        "Articles",
+        state.articlesRead,
+        "Completed readings",
+      )}
+    </section>
+
+    <section class="section-block">
+      <div class="section-title">
+        <h2>
+          Continue learning
+        </h2>
+      </div>
+
+      <div class="action-grid">
         <button
-          class="feature-card peach"
+          class="feature-card"
           data-action="library"
         >
-          <span class="feature-icon">📚</span>
+          <span>▤</span>
           <strong>Library</strong>
-          <small>Read articles</small>
+          <small>
+            Read by level and topic
+          </small>
         </button>
 
         <button
           class="feature-card"
           data-action="practice"
         >
-          <span class="feature-icon">✓</span>
+          <span>✓</span>
           <strong>Practice</strong>
-          <small>Test your English</small>
+          <small>
+            Build accuracy every day
+          </small>
         </button>
 
         <button
           class="feature-card"
           data-action="rooms"
         >
-          <span class="feature-icon">🗣️</span>
+          <span>◉</span>
           <strong>Rooms</strong>
-          <small>Speak with others</small>
-        </button>
-
-        <button
-          class="feature-card"
-          data-action="vocabulary"
-        >
-          <span class="feature-icon">🔖</span>
-          <strong>Vocabulary</strong>
-          <small>Saved words</small>
+          <small>
+            Practice with other learners
+          </small>
         </button>
 
         <button
           class="feature-card"
           data-action="games"
         >
-          <span class="feature-icon">🎮</span>
+          <span>🎮</span>
           <strong>Games</strong>
-          <small>Learn by playing</small>
+          <small>
+            Use language in a fun way
+          </small>
         </button>
-
-        <button
-          class="feature-card"
-          data-action="progress"
-        >
-          <span class="feature-icon">📈</span>
-          <strong>Progress</strong>
-          <small>See your growth</small>
-        </button>
-      </section>
-    </main>
+      </div>
+    </section>
   `);
 }
 
 function renderLibrary(): string {
-  const filteredArticles =
-    articles.filter((article) => {
-      const levelMatches =
-        state.selectedLibraryLevel === "ALL" ||
-        article.level ===
-          state.selectedLibraryLevel;
+  const level =
+    state.selectedLibraryLevel;
 
-      const topicMatches =
-        state.selectedTopic === "ALL" ||
-        article.topic ===
-          state.selectedTopic;
+  const topic =
+    state.selectedTopic;
 
-      return (
-        levelMatches &&
-        topicMatches
-      );
-    });
+  const articles =
+    getLibraryArticles(
+      level === "ALL"
+        ? undefined
+        : level,
+      topic === "ALL"
+        ? undefined
+        : topic,
+    );
 
-  const topics = Array.from(
-    new Set(
-      articles.map(
-        (article) => article.topic,
-      ),
-    ),
-  );
+  return shell(`
+    ${pageHeader(
+      "Learn",
+      "Library",
+      "Choose a level and topic, then open an article.",
+    )}
 
-  return renderShell(`
-    <main class="library-page page">
-      <section class="section-heading">
-        <div>
-          <p class="eyebrow">READING</p>
+    <div class="filter-row">
+      <div class="filter-group">
+        <span>
+          Level
+        </span>
 
-          <h1>Library</h1>
-
-          <p>
-            Choose an article and learn at your level.
-          </p>
-        </div>
-
-        <button
-          class="outline-btn"
-          data-action="vocabulary"
-        >
-          Vocabulary
-        </button>
-      </section>
-
-      <div class="filter-block">
-        <h3>Level</h3>
-
-        <div class="filter-row">
-          ${renderLevelFilters()}
-        </div>
+        ${[
+          "ALL",
+          ...LEVELS,
+        ]
+          .map(
+            (l) => `
+              <button
+                class="chip ${
+                  level === l
+                    ? "selected"
+                    : ""
+                }"
+                data-level="${l}"
+              >
+                ${l}
+              </button>
+            `,
+          )
+          .join("")}
       </div>
 
-      <div class="filter-block">
-        <h3>Topic</h3>
+      <div class="filter-group">
+        <span>
+          Topic
+        </span>
 
-        <div class="filter-row">
-          <button
-            class="filter-btn ${
-              state.selectedTopic === "ALL"
-                ? "selected"
-                : ""
-            }"
-            data-topic="ALL"
-          >
-            All
-          </button>
+        <select
+          id="topicFilter"
+          class="select-control"
+        >
+          <option value="ALL">
+            All topics
+          </option>
 
-          ${topics
+          ${getLibraryTopics()
             .map(
-              (topic) => `
-                <button
-                  class="filter-btn ${
-                    state.selectedTopic ===
-                    topic
+              (t) => `
+                <option
+                  value="${esc(t)}"
+                  ${
+                    topic === t
                       ? "selected"
                       : ""
-                  }"
-                  data-topic="${escapeHtml(
-                    topic,
-                  )}"
+                  }
                 >
-                  ${escapeHtml(topic)}
-                </button>
+                  ${esc(t)}
+                </option>
               `,
             )
             .join("")}
-        </div>
+        </select>
       </div>
+    </div>
 
-      <section class="article-list">
-        ${
-          filteredArticles.length
-            ? filteredArticles
-                .map(
-                  renderArticleCard,
-                )
-                .join("")
-            : `
-              <div class="empty-card">
-                <span>📚</span>
+    <section class="article-grid">
+      ${
+        articles.map(articleCard).join("")
+        ||
+        `
+          <div class="empty-state">
+            <strong>
+              No articles found.
+            </strong>
 
-                <h2>No articles yet</h2>
-
-                <p>
-                  Add your own articles to the
-                  <strong>articles</strong>
-                  list in
-                  <code>src/main.ts</code>.
-                </p>
-              </div>
-            `
-        }
-      </section>
-    </main>
+            <p>
+              Try another level or topic.
+            </p>
+          </div>
+        `
+      }
+    </section>
   `);
 }
 
-function renderLevelFilters(): string {
-  return `
-    <button
-      class="filter-btn ${
-        state.selectedLibraryLevel === "ALL"
-          ? "selected"
-          : ""
-      }"
-      data-level="ALL"
-    >
-      All
-    </button>
-
-    ${(
-      [
-        "A1",
-        "A2",
-        "B1",
-        "B2",
-        "C1",
-        "C2",
-      ] as Level[]
-    )
-      .map(
-        (level) => `
-          <button
-            class="filter-btn ${
-              state.selectedLibraryLevel ===
-              level
-                ? "selected"
-                : ""
-            }"
-            data-level="${level}"
-          >
-            ${level}
-          </button>
-        `,
-      )
-      .join("")}
-  `;
-}
-
-function renderArticleCard(
-  article: Article,
+function articleCard(
+  article: LibraryArticle,
 ): string {
-  const completed =
-    state.completedArticles.includes(
-      article.id,
-    );
-
   return `
     <button
       class="article-card"
-      data-article-id="${article.id}"
+      data-article-id="${esc(article.id)}"
     >
       <div class="article-card-top">
-        <span class="article-level">
-          ${article.level}
+        <span class="level-pill">
+          ${esc(article.level)}
         </span>
 
-        ${
-          completed
-            ? `
-              <span class="completed-label">
-                ✓ Completed
-              </span>
-            `
-            : ""
-        }
+        <span>
+          ${article.readingTime} min
+        </span>
       </div>
 
-      <h2>
-        ${escapeHtml(article.title)}
-      </h2>
+      <h3>
+        ${esc(article.title)}
+      </h3>
 
       <p>
-        ${escapeHtml(article.content[0])}
+        ${esc(article.topic)}
       </p>
 
-      <div class="article-card-bottom">
-        <span>
-          ${escapeHtml(article.topic)}
-        </span>
-
-        <span>Read →</span>
-      </div>
+      <span class="text-link">
+        Read article →
+      </span>
     </button>
   `;
 }
 
 function renderArticle(): string {
-  const article = articles.find(
-    (item) =>
-      item.id ===
-      state.currentArticleId,
-  );
+  const article =
+    state.currentArticleId
+      ? getLibraryArticles().find(
+          (a) =>
+            a.id === state.currentArticleId,
+        )
+      : undefined;
 
   if (!article) {
-    return renderLibrary();
+    return shell(`
+      <div class="empty-state">
+        <h2>
+          Article not found
+        </h2>
+
+        <button
+          class="primary-btn small"
+          data-action="library"
+        >
+          Back to Library
+        </button>
+      </div>
+    `);
   }
 
   const completed =
@@ -1063,1784 +550,1126 @@ function renderArticle(): string {
       article.id,
     );
 
-  return renderShell(`
-    <main class="article-page page">
-      <button
-        class="back-btn"
-        data-action="library"
-      >
-        ← Library
-      </button>
+  return shell(`
+    ${pageHeader(
+      article.level,
+      article.title,
+      article.topic,
+    )}
 
-      <div class="article-meta">
-        <span class="article-level">
-          ${article.level}
-        </span>
-
+    <article class="reading-card">
+      <div class="reading-meta">
         <span>
-          ${escapeHtml(article.topic)}
+          ${article.readingTime} min read
         </span>
+
+        <a
+          href="${createGoogleTranslateUrl(
+            article.content,
+          )}"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Google Translate
+        </a>
       </div>
 
-      <h1>
-        ${escapeHtml(article.title)}
-      </h1>
-
-      <p class="article-help">
-        Tap any word to save it to your vocabulary.
-      </p>
-
-      <article class="article-content">
+      <div class="reading-content">
         ${article.content
+          .split(/\n+/)
           .map(
-            (paragraph) => `
-              <p>
-                ${makeClickableWords(
-                  paragraph,
-                )}
-              </p>
-            `,
+            (p) =>
+              `<p>${esc(p)}</p>`,
           )
           .join("")}
-      </article>
-
-      <div class="article-actions">
-        <button
-          class="primary-btn"
-          data-action="completeArticle"
-          data-article-id="${article.id}"
-        >
-          ${
-            completed
-              ? "Completed ✓"
-              : "Mark as completed"
-          }
-        </button>
-
-        <button
-          class="secondary-btn"
-          data-action="vocabulary"
-        >
-          Open Vocabulary
-        </button>
       </div>
-    </main>
-  `);
-}
 
-function makeClickableWords(
-  text: string,
-): string {
-  return text
-    .split(/(\s+)/)
-    .map((part) => {
-      if (/^\s+$/.test(part)) {
-        return part;
-      }
+      <div class="vocab-inline">
+        <h3>
+          Key vocabulary
+        </h3>
 
-      const cleanWord =
-        part.replace(
-          /^[^\p{L}\p{N}'-]+|[^\p{L}\p{N}'-]+$/gu,
-          "",
-        );
-
-      if (!cleanWord) {
-        return escapeHtml(part);
-      }
-
-      return `
-        <button
-          type="button"
-          class="article-word ${
-            state.vocabulary.includes(
-              cleanWord.toLowerCase(),
+        <div class="word-list">
+          ${article.vocabulary
+            .map(
+              (word) => `
+                <button
+                  class="word-chip"
+                  data-word="${esc(word)}"
+                >
+                  ${esc(word)}
+                </button>
+              `,
             )
-              ? "saved"
-              : ""
-          }"
-          data-word="${escapeHtml(
-            cleanWord.toLowerCase(),
-          )}"
-        >
-          ${escapeHtml(part)}
-        </button>
-      `;
-    })
-    .join("");
+            .join("")}
+        </div>
+      </div>
+
+      <button
+        class="primary-btn"
+        data-action="completeArticle"
+        data-article-id="${esc(article.id)}"
+        ${completed ? "disabled" : ""}
+      >
+        ${
+          completed
+            ? "Completed ✓"
+            : "Mark as completed +10 XP"
+        }
+      </button>
+    </article>
+  `);
 }
 
 function renderVocabulary(): string {
-  return renderShell(`
-    <main class="vocabulary-page page">
-      <section class="section-heading">
-        <div>
-          <p class="eyebrow">MY WORDS</p>
+  const words =
+    state.vocabulary;
 
-          <h1>Vocabulary</h1>
+  return shell(`
+    ${pageHeader(
+      "Learn",
+      "Vocabulary",
+      "Words you saved while reading.",
+    )}
 
-          <p>
-            Words you saved while reading.
-          </p>
-        </div>
+    ${
+      words.length
+        ? `
+          <div class="vocabulary-list">
+            ${words
+              .map(
+                (word) => `
+                  <div class="vocabulary-row">
+                    <strong>
+                      ${esc(word.word)}
+                    </strong>
 
-        ${
-          state.vocabulary.length
-            ? `
-              <button
-                class="outline-btn danger"
-                data-action="clearVocabulary"
-              >
-                Clear all
-              </button>
-            `
-            : ""
-        }
-      </section>
+                    <span>
+                      ${esc(word.meaning)}
+                    </span>
 
-      ${
-        state.vocabulary.length
-          ? `
-            <div class="vocab-list">
-              ${state.vocabulary
-                .map(
-                  (word) => `
-                    <div class="vocab-item">
-                      <span>
-                        ${escapeHtml(
-                          word,
-                        )}
-                      </span>
-
-                      <button
-                        class="remove-word"
-                        data-remove-word="${escapeHtml(
-                          word,
-                        )}"
-                        aria-label="Remove word"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  `,
-                )
-                .join("")}
+                    <button
+                      class="icon-btn"
+                      data-remove-word="${esc(
+                        word.id,
+                      )}"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                `,
+              )
+              .join("")}
+          </div>
+        `
+        : `
+          <div class="empty-state">
+            <div class="empty-icon">
+              🔖
             </div>
-          `
-          : `
-            <div class="empty-card">
-              <span>🔖</span>
 
-              <h2>
-                Your vocabulary is empty
-              </h2>
+            <h2>
+              Your vocabulary is empty
+            </h2>
 
-              <p>
-                Open an article and tap words
-                you want to remember.
-              </p>
+            <p>
+              Open an article and tap words
+              you want to remember.
+            </p>
 
-              <button
-                class="primary-btn"
-                data-action="library"
-              >
-                Read an article
-              </button>
-            </div>
-          `
-      }
-    </main>
+            <button
+              class="primary-btn small"
+              data-action="library"
+            >
+              Open Library
+            </button>
+          </div>
+        `
+    }
   `);
 }
 
+const practiceBank = [
+  {
+    q: "Choose the correct sentence.",
+    a: [
+      "She go to school every day.",
+      "She goes to school every day.",
+      "She going to school every day.",
+      "She gone to school every day.",
+    ],
+    c: 1,
+  },
+
+  {
+    q: "I have lived here ___ 2022.",
+    a: [
+      "for",
+      "since",
+      "during",
+      "from",
+    ],
+    c: 1,
+  },
+
+  {
+    q: "Choose the closest meaning of “improve”.",
+    a: [
+      "to get better",
+      "to disappear",
+      "to forget",
+      "to stop",
+    ],
+    c: 0,
+  },
+
+  {
+    q: "If I ___ more time, I would learn Chinese.",
+    a: [
+      "have",
+      "had",
+      "will have",
+      "having",
+    ],
+    c: 1,
+  },
+];
+
 function renderPractice(): string {
-  const question =
-    practiceQuestions[
-      currentPracticeIndex
-    ];
+  const item =
+    practiceBank[practiceIndex];
 
-  return renderShell(`
-    <main class="practice-page page">
-      <section class="section-heading">
-        <div>
-          <p class="eyebrow">PRACTICE</p>
+  return shell(`
+    ${pageHeader(
+      "Practice",
+      "Practice",
+      "Short exercises to strengthen grammar and vocabulary.",
+    )}
 
-          <h1>Practice</h1>
-
-          <p>
-            Short exercises to strengthen your English.
-          </p>
-        </div>
-
-        <div class="score-pill">
-          Score: ${state.practiceScore}
-        </div>
-      </section>
-
+    <div class="practice-card">
       <div class="practice-progress">
-        Question
-        ${currentPracticeIndex + 1}
-        of
-        ${practiceQuestions.length}
+        <span>
+          Question ${
+            practiceIndex + 1
+          } of ${practiceBank.length}
+        </span>
+
+        <span>
+          ${state.practiceScore} correct
+        </span>
       </div>
 
-      <section class="question-card">
-        <h2>
-          ${escapeHtml(
-            question.question,
-          )}
-        </h2>
+      <h2>
+        ${esc(item.q)}
+      </h2>
 
-        <div class="answers">
-          ${question.answers
-            .map(
-              (
-                answer,
-                index,
-              ) => `
+      <div class="answer-list">
+        ${item.a
+          .map(
+            (answer, i) => {
+              const stateClass =
+                practiceAnswered
+                  ? i === item.c
+                    ? "correct"
+                    : "wrong"
+                  : "";
+
+              return `
                 <button
-                  class="answer-btn"
-                  data-answer-index="${index}"
+                  class="answer-option ${stateClass}"
+                  data-answer-index="${i}"
                   ${
                     practiceAnswered
                       ? "disabled"
                       : ""
                   }
                 >
-                  <span>
-                    ${String.fromCharCode(
-                      65 + index,
-                    )}
-                  </span>
-
-                  ${escapeHtml(
-                    answer,
-                  )}
+                  ${esc(answer)}
                 </button>
-              `,
-            )
-            .join("")}
-        </div>
+              `;
+            },
+          )
+          .join("")}
+      </div>
 
-        ${
-          practiceAnswered
-            ? `
-              <div class="answer-message">
-                ${
-                  practiceQuestions[
-                    currentPracticeIndex
-                  ].correct ===
-                  getLastAnswer()
-                    ? "Correct! 🎉"
-                    : `The correct answer is: ${escapeHtml(
-                        question.answers[
-                          question.correct
-                        ],
-                      )}`
-                }
-              </div>
-
-              <button
-                class="primary-btn"
-                data-action="nextQuestion"
-              >
-                ${
-                  currentPracticeIndex ===
-                  practiceQuestions.length -
-                    1
-                    ? "Finish"
-                    : "Next question"
-                }
-              </button>
-            `
-            : ""
-        }
-      </section>
-    </main>
+      ${
+        practiceAnswered
+          ? `
+            <button
+              class="primary-btn small"
+              data-action="nextPractice"
+            >
+              ${
+                practiceIndex ===
+                practiceBank.length - 1
+                  ? "Start again"
+                  : "Next question"
+              }
+            </button>
+          `
+          : ""
+      }
+    </div>
   `);
 }
 
-/* =========================================================
-   REAL ROOMS UI
-   ========================================================= */
-
 function renderRooms(): string {
-  return renderShell(`
-    <main class="rooms-page page">
+  const rooms =
+    getAllRooms().filter(
+      (room) =>
+        room.status !== "ended",
+    );
 
-      <section class="section-heading">
-        <div>
-          <p class="eyebrow">SPEAKING</p>
+  return shell(`
+    ${pageHeader(
+      "Talk",
+      "Rooms",
+      "Simple conversation rooms — like Free4Talk, with DRE2learn safety controls.",
+    )}
 
-          <h1>Rooms</h1>
+    <div class="rooms-toolbar">
+      <button
+        class="primary-btn small"
+        data-action="newRoom"
+      >
+        Create room
+      </button>
 
-          <p>
-            Speak with another learner in real time.
-          </p>
-        </div>
-      </section>
+      <div class="room-note">
+        Up to 8 participants per room
+      </div>
+    </div>
 
-      <section class="rooms-connection-card">
+    <section class="room-grid">
+      ${
+        rooms.map(
+          (room) => `
+            <article class="room-card">
+              <div class="room-card-head">
+                <span class="level-pill">
+                  ${esc(room.level)}
+                </span>
 
-        <div class="room-connection-status">
-          <span
-            class="room-status ${
-              isRoomConnected
-                ? "connected"
-                : ""
-            }"
-          ></span>
-
-          <div>
-            <strong>
-              ${
-                isRoomConnected
-                  ? "Connected"
-                  : "Not connected"
-              }
-            </strong>
-
-            <small>
-              ${escapeHtml(
-                roomStatusMessage,
-              )}
-            </small>
-          </div>
-        </div>
-
-        <div class="room-id-box">
-
-          <label for="roomPeerId">
-            Room code
-          </label>
-
-          <input
-            id="roomPeerId"
-            type="text"
-            placeholder="Paste your partner's Room ID"
-            autocomplete="off"
-          />
-
-          <button
-            class="primary-btn"
-            data-action="joinRealRoom"
-          >
-            Join Room
-          </button>
-
-        </div>
-
-        <div class="my-room-box">
-
-          <span>
-            Your Room ID
-          </span>
-
-          <strong id="myPeerId">
-            ${
-              currentRoomPeerId ||
-              "Connecting..."
-            }
-          </strong>
-
-          <button
-            class="secondary-btn"
-            data-action="copyRoomId"
-          >
-            Copy Room ID
-          </button>
-
-        </div>
-
-      </section>
-
-      <section class="room-media-card">
-
-        <div class="room-video-grid">
-
-          <div class="video-card">
-
-            <span class="video-label">
-              You
-            </span>
-
-            <video
-              id="localVideo"
-              autoplay
-              playsinline
-              muted
-            ></video>
-
-            <div
-              class="video-empty"
-              id="localVideoEmpty"
-            >
-              Your camera
-            </div>
-
-          </div>
-
-          <div class="video-card">
-
-            <span class="video-label">
-              Partner
-            </span>
-
-            <video
-              id="remoteVideo"
-              autoplay
-              playsinline
-            ></video>
-
-            <div
-              class="video-empty"
-              id="remoteVideoEmpty"
-            >
-              Waiting for partner
-            </div>
-
-          </div>
-
-        </div>
-
-        <div class="room-controls">
-
-          <button
-            class="primary-small-btn"
-            data-action="startCamera"
-          >
-            🎥 Camera
-          </button>
-
-          <button
-            class="primary-small-btn"
-            data-action="shareScreen"
-            ${
-              !isRoomConnected
-                ? "disabled"
-                : ""
-            }
-          >
-            🖥️ Share Screen
-          </button>
-
-          <button
-            class="secondary-small-btn"
-            data-action="stopScreen"
-            ${
-              !isScreenSharing
-                ? "disabled"
-                : ""
-            }
-          >
-            Stop Sharing
-          </button>
-
-          <button
-            class="danger-small-btn"
-            data-action="leaveRoom"
-          >
-            Leave
-          </button>
-
-        </div>
-
-        ${
-          isScreenSharing
-            ? `
-              <div class="screen-share-active">
-                🟢 Screen sharing is active.
-                You can move around DRE2learn normally.
+                <span>
+                  ${room.participantIds.length}/${room.maxParticipants}
+                </span>
               </div>
-            `
-            : ""
-        }
 
-      </section>
+              <h3>
+                ${esc(room.title)}
+              </h3>
 
-      <section class="rooms-notice">
+              <p>
+                ${esc(room.language)}
+                ·
+                ${esc(room.topic)}
+              </p>
 
-        <span>🗣️</span>
+              <div class="room-tags">
+                <span>
+                  ${
+                    room.type === "video"
+                      ? "Video"
+                      : "Audio"
+                  }
+                </span>
 
-        <div>
+                <span>
+                  ${esc(room.gender)}
+                </span>
+              </div>
 
-          <strong>
-            Real-time speaking room
-          </strong>
-
-          <p>
-            Share your Room ID with another learner.
-            Once connected, you can communicate and share your screen.
-          </p>
-
-        </div>
-
-      </section>
-
-      <section class="translate-box">
-
-        <div>
-
-          <span class="translate-icon">
-            文
-          </span>
-
-          <div>
-
+              <button
+                class="secondary-btn small"
+                data-join-room="${esc(room.id)}"
+              >
+                Join room
+              </button>
+            </article>
+          `,
+        ).join("")
+        ||
+        `
+          <div class="empty-state">
             <h2>
-              Google Translate
+              No rooms yet
             </h2>
 
             <p>
-              Use translation while you're speaking.
+              Create the first room and
+              invite learners.
             </p>
-
           </div>
+        `
+      }
+    </section>
 
-        </div>
+    <div id="roomComposer"></div>
+  `);
+}
 
-        <textarea
-          id="translateText"
-          placeholder="Type a word or sentence..."
-          rows="4"
-        ></textarea>
-
+function roomComposer(): string {
+  return `
+    <div
+      class="modal-backdrop"
+      id="roomModal"
+    >
+      <div class="modal-card">
         <button
-          class="primary-btn"
-          data-action="translate"
+          class="modal-close"
+          data-action="closeModal"
         >
-          Open Google Translate
+          ×
         </button>
 
-      </section>
+        <h2>
+          Create a room
+        </h2>
 
-    </main>
+        <form
+          id="roomForm"
+          class="form-stack"
+        >
+          <label>
+            Room title
+
+            <input
+              name="title"
+              required
+              maxlength="60"
+              placeholder="English conversation"
+            />
+          </label>
+
+          <label>
+            Language
+
+            <input
+              name="language"
+              required
+              value="English"
+            />
+          </label>
+
+          <label>
+            Level
+
+            <select name="level">
+              ${LEVELS
+                .map(
+                  (l) =>
+                    `<option>${l}</option>`,
+                )
+                .join("")}
+            </select>
+          </label>
+
+          <label>
+            Topic
+
+            <select name="topic">
+              <option>
+                Reading
+              </option>
+
+              ${getLibraryTopics()
+                .filter(
+                  (t) =>
+                    t !== "Reading",
+                )
+                .map(
+                  (t) =>
+                    `<option>${esc(
+                      t,
+                    )}</option>`,
+                )
+                .join("")}
+            </select>
+          </label>
+
+          <label>
+            Room type
+
+            <select name="type">
+              <option value="audio">
+                Audio
+              </option>
+
+              <option value="video">
+                Video
+              </option>
+            </select>
+          </label>
+
+          <label>
+            Who can join
+
+            <select name="gender">
+              <option value="girls">
+                Girls
+              </option>
+
+              <option value="boys">
+                Boys
+              </option>
+
+              <option value="mixed">
+                Mixed
+              </option>
+            </select>
+          </label>
+
+          <button
+            class="primary-btn"
+            type="submit"
+          >
+            Create room
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderMessages(): string {
+  const requests =
+    getAllMessageRequests();
+
+  const conversations =
+    getAllConversations();
+
+  const messages =
+    getAllMessages();
+
+  const uid =
+    userId();
+
+  const pending =
+    requests.filter(
+      (r) =>
+        r.receiverId === uid &&
+        r.status === "pending",
+    ).length;
+
+  const unread =
+    messages.filter(
+      (m) =>
+        m.receiverId === uid &&
+        !m.read,
+    ).length;
+
+  return shell(`
+    ${pageHeader(
+      "Connect",
+      "Messages",
+      "Private messaging opens only after both people accept the request.",
+    )}
+
+    <div class="message-summary">
+      ${statCard(
+        "Requests",
+        pending,
+        "Pending requests",
+      )}
+
+      ${statCard(
+        "Unread",
+        unread,
+        "Unread messages",
+      )}
+
+      ${statCard(
+        "Chats",
+        conversations.filter(
+          (c) =>
+            c.participantIds.includes(
+              uid,
+            ),
+        ).length,
+        "Accepted conversations",
+      )}
+    </div>
+
+    <div class="empty-state">
+      <div class="empty-icon">
+        ✉
+      </div>
+
+      <h2>
+        Your messages
+      </h2>
+
+      <p>
+        Message requests, accepted
+        conversations, and unread
+        messages will appear here.
+      </p>
+    </div>
   `);
 }
 
 function renderGames(): string {
-  return renderShell(`
-    <main class="games-page page">
+  return shell(`
+    ${pageHeader(
+      "Practice",
+      "Games",
+      "Quick language games for rooms and individual practice.",
+    )}
 
-      <section class="section-heading">
+    <div class="game-grid">
+      <button class="game-card">
+        <span>🧩</span>
 
-        <div>
-
-          <p class="eyebrow">
-            PLAY & LEARN
-          </p>
-
-          <h1>
-            Games
-          </h1>
-
-          <p>
-            Learn English while having fun.
-          </p>
-
-        </div>
-
-      </section>
-
-      <section class="game-card-large">
-
-        <div class="game-placeholder">
-          🎮
-        </div>
-
-        <h2>
-          Your game is coming here
-        </h2>
+        <h3>
+          Guess the word
+        </h3>
 
         <p>
-          The game can be connected here when it is ready.
+          Explain a word without saying it.
         </p>
+      </button>
 
-      </section>
+      <button class="game-card">
+        <span>⏱</span>
 
-    </main>
+        <h3>
+          30 seconds
+        </h3>
+
+        <p>
+          Keep talking until the timer ends.
+        </p>
+      </button>
+
+      <button class="game-card">
+        <span>❓</span>
+
+        <h3>
+          Reverse question
+        </h3>
+
+        <p>
+          Answer only by asking a question.
+        </p>
+      </button>
+
+      <button class="game-card">
+        <span>🕵️</span>
+
+        <h3>
+          Mystery Card
+        </h3>
+
+        <p>
+          Unexpected missions for your session.
+        </p>
+      </button>
+    </div>
   `);
 }
 
 function renderProgress(): string {
-  const completed =
-    state.completedArticles.length;
+  const stats =
+    getProgressStats(state);
 
-  const words =
-    state.vocabulary.length;
+  const level =
+    getLevelFromXp(
+      state.totalXp,
+    );
 
-  const score =
-    state.practiceScore;
+  return shell(`
+    ${pageHeader(
+      "Your journey",
+      "Progress",
+      "Track learning without exposing private conversations.",
+    )}
 
-  return renderShell(`
-    <main class="progress-page page">
+    <div class="stats-grid">
+      ${statCard(
+        "Level",
+        level,
+        "Current CEFR progress",
+      )}
 
-      <section class="section-heading">
+      ${statCard(
+        "XP",
+        state.totalXp,
+        "Total",
+      )}
 
-        <div>
+      ${statCard(
+        "Streak",
+        `${stats.currentStreak} days`,
+        "Current",
+      )}
 
-          <p class="eyebrow">
-            YOUR JOURNEY
-          </p>
+      ${statCard(
+        "Daily goal",
+        `${stats.dailyGoalProgress}/${stats.dailyGoal}`,
+        stats.dailyGoalCompleted
+          ? "Completed"
+          : "Keep going",
+      )}
+    </div>
 
-          <h1>
-            Progress
-          </h1>
+    <section class="progress-panel">
+      <h2>
+        Level progress
+      </h2>
 
-          <p>
-            Keep going. Small steps matter.
-          </p>
+      ${LEVELS
+        .map(
+          (l) => {
+            const active =
+              l === level;
 
-        </div>
+            const percentage =
+              l === level
+                ? getLevelProgress(
+                    state.totalXp,
+                  )
+                : LEVELS.indexOf(l) <
+                    LEVELS.indexOf(level)
+                  ? 100
+                  : 0;
 
-      </section>
+            return `
+              <div class="level-row">
+                <span
+                  class="${
+                    active
+                      ? "active-level"
+                      : ""
+                  }"
+                >
+                  ${l}
+                </span>
 
-      <section class="stats-grid">
+                <div class="progress-track">
+                  <span
+                    style="width:${percentage}%"
+                  ></span>
+                </div>
+              </div>
+            `;
+          },
+        )
+        .join("")}
+    </section>
 
-        <div class="stat-card">
+    <section class="stats-grid">
+      ${statCard(
+        "Articles",
+        state.articlesRead,
+        "Completed",
+      )}
 
-          <span>📚</span>
+      ${statCard(
+        "Vocabulary",
+        state.vocabularyLearned,
+        "Learned",
+      )}
 
-          <strong>
-            ${completed}
-          </strong>
+      ${statCard(
+        "Practice",
+        state.practiceCompleted,
+        "Sessions",
+      )}
 
-          <small>
-            Articles completed
-          </small>
-
-        </div>
-
-        <div class="stat-card">
-
-          <span>🔖</span>
-
-          <strong>
-            ${words}
-          </strong>
-
-          <small>
-            Saved words
-          </small>
-
-        </div>
-
-        <div class="stat-card">
-
-          <span>✓</span>
-
-          <strong>
-            ${score}
-          </strong>
-
-          <small>
-            Practice points
-          </small>
-
-        </div>
-
-      </section>
-
-      <section class="progress-card large-progress-card">
-
-        <div>
-
-          <span>
-            Current level
-          </span>
-
-          <strong>
-            ${state.level}
-          </strong>
-
-        </div>
-
-        <p>
-          Continue reading, practicing, and speaking
-          to build your skills.
-        </p>
-
-      </section>
-
-    </main>
+      ${statCard(
+        "Rooms",
+        state.roomsJoined,
+        "Joined",
+      )}
+    </section>
   `);
 }
 
 function renderProfile(): string {
-  const safeName =
-    escapeHtml(
-      state.name || "Learner",
-    );
+  const user =
+    currentUser();
 
-  const safeEmail =
-    escapeHtml(
-      state.email || "No email",
-    );
+  if (!user) {
+    return renderWelcomeScreen();
+  }
 
-  return renderShell(`
-    <main class="profile-page page">
+  return shell(`
+    ${pageHeader(
+      "Account",
+      "Profile",
+      "Your DRE2learn learning identity.",
+    )}
 
-      <section class="profile-header">
+    <section class="profile-card">
+      <div class="profile-avatar">
+        ${avatarMarkup(
+          user.avatar,
+          150,
+        )}
+      </div>
 
-        <div class="profile-avatar">
-          ${avatarSvg(150)}
-        </div>
-
-        <h1>
-          ${safeName}
-        </h1>
-
-        <p>
-          ${safeEmail}
-        </p>
-
+      <div class="profile-main">
         <span class="level-pill">
-          English ${state.level}
+          ${esc(
+            getLevelFromXp(
+              state.totalXp,
+            ),
+          )}
         </span>
 
-      </section>
+        <h2>
+          ${esc(
+            user.name || "Learner",
+          )}
+        </h2>
 
-      <section class="profile-menu">
+        <p>
+          ${esc(user.email)}
+        </p>
 
-        <button
-          data-action="vocabulary"
-        >
-
-          <span>🔖</span>
-
-          <div>
-
+        <div class="profile-stats">
+          <span>
             <strong>
-              Vocabulary
+              ${state.totalXp}
             </strong>
+            XP
+          </span>
 
-            <small>
-              ${state.vocabulary.length}
-              saved words
-            </small>
-
-          </div>
-
-          <b>›</b>
-
-        </button>
-
-        <button
-          data-action="progress"
-        >
-
-          <span>📈</span>
-
-          <div>
-
+          <span>
             <strong>
-              Progress
+              ${state.cardsCollected}
             </strong>
+            cards
+          </span>
 
-            <small>
-              See your learning activity
-            </small>
-
-          </div>
-
-          <b>›</b>
-
-        </button>
-
-        <button
-          data-action="avatar"
-        >
-
-          <span>🎨</span>
-
-          <div>
-
+          <span>
             <strong>
-              Edit avatar
+              ${state.roomsJoined}
             </strong>
+            rooms
+          </span>
+        </div>
+      </div>
+    </section>
 
-            <small>
-              Change your avatar
-            </small>
-
-          </div>
-
-          <b>›</b>
-
-        </button>
-
-      </section>
+    <div class="profile-actions">
+      <button
+        class="secondary-btn"
+        data-action="avatar"
+      >
+        Edit avatar
+      </button>
 
       <button
-        class="logout-btn"
+        class="outline-btn"
         data-action="logout"
       >
         Log out
       </button>
-
-    </main>
+    </div>
   `);
 }
 
-/* =========================================================
-   WEBRTC / PEERJS FUNCTIONS
-   ========================================================= */
-
-function createPeer(): void {
-  if (peer && !peer.destroyed) {
-    return;
-  }
-
-  roomStatusMessage =
-    "Connecting to room service...";
-
-  peer = new Peer();
-
-  peer.on("open", (id) => {
-    currentRoomPeerId = id;
-
-    roomStatusMessage =
-      "Your Room ID is ready.";
-
-    if (state.page === "rooms") {
-      render();
-
-      window.setTimeout(() => {
-        attachCurrentStreamsToRoomUI();
-      }, 50);
-    }
-  });
-
-  peer.on("call", (incomingCall) => {
-    handleIncomingCall(incomingCall);
-  });
-
-  peer.on("error", (error) => {
-    console.error(
-      "PeerJS error:",
-      error,
-    );
-
-    roomStatusMessage =
-      "Room connection error.";
-
-    showToast(
-      "Room connection failed. Try again.",
-    );
-
-    if (state.page === "rooms") {
-      render();
-    }
-  });
-
-  peer.on("disconnected", () => {
-    roomStatusMessage =
-      "Disconnected from room service.";
-
-    if (state.page === "rooms") {
-      render();
-    }
-  });
-
-  peer.on("close", () => {
-    currentRoomPeerId = "";
-    connectedRoomPeerId = "";
-    isRoomConnected = false;
-
-    roomStatusMessage =
-      "Room closed.";
-  });
-}
-
-async function startCamera(): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    showToast(
-      "Your browser does not support camera access.",
-    );
-
-    return;
-  }
-
-  try {
-    if (localMediaStream) {
-      localMediaStream
-        .getTracks()
-        .forEach((track) => {
-          track.stop();
-        });
-    }
-
-    localMediaStream =
-      await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-
-    attachCurrentStreamsToRoomUI();
-
-    showToast(
-      "Camera and microphone are ready.",
-    );
-
-    /*
-      If already connected, replace the active
-      outgoing media connection with the new stream.
-    */
-    if (
-      activeCall &&
-      connectedRoomPeerId
-    ) {
-      const newCall = peer?.call(
-        connectedRoomPeerId,
-        localMediaStream,
-      );
-
-      if (newCall) {
-        setupOutgoingCall(newCall);
-      }
-    }
-  } catch (error) {
-    console.error(
-      "Camera error:",
-      error,
-    );
-
-    showToast(
-      "Camera or microphone permission was denied.",
-    );
-  }
-}
-
-async function joinRealRoom(
-  remotePeerId: string,
-): Promise<void> {
-  const targetId =
-    remotePeerId.trim();
-
-  if (!targetId) {
-    showToast(
-      "Enter the other user's Room ID.",
-    );
-
-    return;
-  }
-
-  if (!peer) {
-    createPeer();
-
-    /*
-      Wait briefly for PeerJS to initialize.
-    */
-    await new Promise<void>(
-      (resolve) => {
-        let finished = false;
-
-        const finish = () => {
-          if (finished) return;
-
-          finished = true;
-          resolve();
-        };
-
-        const timeout =
-          window.setTimeout(
-            finish,
-            1800,
-          );
-
-        if (peer) {
-          peer.once(
-            "open",
-            () => {
-              window.clearTimeout(
-                timeout,
-              );
-
-              finish();
-            },
-          );
-        }
-      },
-    );
-  }
-
-  if (!peer || peer.destroyed) {
-    showToast(
-      "Room service is not ready.",
-    );
-
-    return;
-  }
-
-  try {
-    if (!localMediaStream) {
-      localMediaStream =
-        await navigator.mediaDevices.getUserMedia(
-          {
-            video: true,
-            audio: true,
-          },
-        );
-    }
-
-    connectedRoomPeerId =
-      targetId;
-
-    roomStatusMessage =
-      "Connecting to your partner...";
-
-    if (state.page === "rooms") {
-      render();
-
-      window.setTimeout(() => {
-        attachCurrentStreamsToRoomUI();
-      }, 50);
-    }
-
-    const call = peer.call(
-      targetId,
-      localMediaStream,
-    );
-
-    if (!call) {
-      throw new Error(
-        "Unable to create media call.",
-      );
-    }
-
-    setupOutgoingCall(call);
-  } catch (error) {
-    console.error(
-      "Join room error:",
-      error,
-    );
-
-    roomStatusMessage =
-      "Could not connect.";
-
-    showToast(
-      "Could not join this room.",
-    );
-
-    render();
-  }
-}
-
-function setupOutgoingCall(
-  call: MediaConnection,
-): void {
-  activeCall = call;
-
-  call.on("stream", (stream) => {
-    remoteStream = stream;
-
-    isRoomConnected = true;
-
-    roomStatusMessage =
-      "Connected to your partner.";
-
-    attachCurrentStreamsToRoomUI();
-  });
-
-  call.on("close", () => {
-    if (activeCall === call) {
-      activeCall = null;
-    }
-
-    remoteStream = null;
-    isRoomConnected = false;
-
-    roomStatusMessage =
-      "Your partner left the room.";
-
-    if (state.page === "rooms") {
-      render();
-    }
-  });
-
-  call.on("error", (error) => {
-    console.error(
-      "Media call error:",
-      error,
-    );
-
-    roomStatusMessage =
-      "Media connection error.";
-
-    showToast(
-      "The media connection failed.",
-    );
-  });
-}
-
-async function handleIncomingCall(
-  incomingCall: MediaConnection,
-): Promise<void> {
-  try {
-    if (!localMediaStream) {
-      localMediaStream =
-        await navigator.mediaDevices.getUserMedia(
-          {
-            video: true,
-            audio: true,
-          },
-        );
-    }
-
-    activeCall = incomingCall;
-
-    connectedRoomPeerId =
-      incomingCall.peer;
-
-    incomingCall.answer(
-      localMediaStream,
-    );
-
-    incomingCall.on(
-      "stream",
-      (stream) => {
-        remoteStream = stream;
-
-        isRoomConnected = true;
-
-        roomStatusMessage =
-          "Connected to your partner.";
-
-        if (state.page === "rooms") {
-          render();
-
-          window.setTimeout(() => {
-            attachCurrentStreamsToRoomUI();
-          }, 50);
-        }
-      },
-    );
-
-    incomingCall.on("close", () => {
-      activeCall = null;
-      remoteStream = null;
-      isRoomConnected = false;
-
-      roomStatusMessage =
-        "Your partner left the room.";
-
-      if (state.page === "rooms") {
-        render();
-      }
-    });
-
-    showToast(
-      "Incoming room connection accepted.",
-    );
-  } catch (error) {
-    console.error(
-      "Incoming call error:",
-      error,
-    );
-
-    incomingCall.close();
-
-    showToast(
-      "Could not accept the room connection.",
-    );
-  }
-}
-
-async function shareScreen(): Promise<void> {
-  if (!isRoomConnected) {
-    showToast(
-      "Join a room first.",
-    );
-
-    return;
-  }
-
-  if (!navigator.mediaDevices?.getDisplayMedia) {
-    showToast(
-      "Screen sharing is not supported by this browser.",
-    );
-
-    return;
-  }
-
-  try {
-    screenStream =
-      await navigator.mediaDevices.getDisplayMedia(
-        {
-          video: true,
-          audio: false,
-        },
-      );
-
-    const screenTrack =
-      screenStream.getVideoTracks()[0];
-
-    if (!screenTrack) {
-      throw new Error(
-        "No screen track was created.",
-      );
-    }
-
-    isScreenSharing = true;
-
-    /*
-      The screen is sent as the video track
-      through a new WebRTC media call.
-    */
-    if (
-      peer &&
-      connectedRoomPeerId
-    ) {
-      const screenOnlyStream =
-        new MediaStream([
-          screenTrack,
-        ]);
-
-      const screenCall =
-        peer.call(
-          connectedRoomPeerId,
-          screenOnlyStream,
-          {
-            metadata: {
-              type: "screen-share",
-            },
-          },
-        );
-
-      if (screenCall) {
-        screenCall.on(
-          "stream",
-          () => {
-            /*
-              Screen share is one-way.
-            */
-          },
-        );
-
-        screenCall.on(
-          "close",
-          () => {
-            if (screenStream) {
-              screenStream
-                .getTracks()
-                .forEach(
-                  (track) =>
-                    track.stop(),
-                );
-
-              screenStream = null;
-            }
-
-            isScreenSharing = false;
-          },
-        );
-      }
-    }
-
-    /*
-      The browser tells us when the user clicks
-      "Stop sharing" in the browser's own UI.
-    */
-    screenTrack.addEventListener(
-      "ended",
-      () => {
-        stopScreenSharing(false);
-      },
-    );
-
-    /*
-      Show the shared screen locally as well.
-    */
-    attachScreenPreview();
-
-    if (state.page === "rooms") {
-      render();
-
-      window.setTimeout(() => {
-        attachCurrentStreamsToRoomUI();
-        attachScreenPreview();
-      }, 50);
-    }
-
-    showToast(
-      "Screen sharing started.",
-    );
-  } catch (error) {
-    console.error(
-      "Screen share error:",
-      error,
-    );
-
-    isScreenSharing = false;
-    screenStream = null;
-
-    showToast(
-      "Screen sharing was cancelled or blocked.",
-    );
-  }
-}
-
-function stopScreenSharing(
-  showMessage = true,
-): void {
-  if (screenStream) {
-    screenStream
-      .getTracks()
-      .forEach((track) => {
-        track.stop();
-      });
-
-    screenStream = null;
-  }
-
-  isScreenSharing = false;
-
-  if (showMessage) {
-    showToast(
-      "Screen sharing stopped.",
-    );
-  }
-
-  if (state.page === "rooms") {
-    render();
-
-    window.setTimeout(() => {
-      attachCurrentStreamsToRoomUI();
-    }, 50);
-  }
-}
-
-function leaveRoom(): void {
-  if (activeCall) {
-    activeCall.close();
-    activeCall = null;
-  }
-
-  if (localMediaStream) {
-    localMediaStream
-      .getTracks()
-      .forEach((track) => {
-        track.stop();
-      });
-
-    localMediaStream = null;
-  }
-
-  if (screenStream) {
-    screenStream
-      .getTracks()
-      .forEach((track) => {
-        track.stop();
-      });
-
-    screenStream = null;
-  }
-
-  remoteStream = null;
-
-  connectedRoomPeerId = "";
-  isRoomConnected = false;
-  isScreenSharing = false;
-
-  roomStatusMessage =
-    "You left the room.";
-
-  showToast(
-    "You left the room.",
-  );
-
-  render();
-}
-
-function attachCurrentStreamsToRoomUI(): void {
-  const localVideo =
-    document.querySelector<HTMLVideoElement>(
-      "#localVideo",
-    );
-
-  const remoteVideo =
-    document.querySelector<HTMLVideoElement>(
-      "#remoteVideo",
-    );
-
-  const localEmpty =
-    document.querySelector<HTMLElement>(
-      "#localVideoEmpty",
-    );
-
-  const remoteEmpty =
-    document.querySelector<HTMLElement>(
-      "#remoteVideoEmpty",
-    );
-
-  if (
-    localVideo &&
-    localMediaStream
-  ) {
-    localVideo.srcObject =
-      localMediaStream;
-
-    localVideo.style.display =
-      "block";
-
-    if (localEmpty) {
-      localEmpty.style.display =
-        "none";
-    }
-  }
-
-  if (
-    remoteVideo &&
-    remoteStream
-  ) {
-    remoteVideo.srcObject =
-      remoteStream;
-
-    remoteVideo.style.display =
-      "block";
-
-    if (remoteEmpty) {
-      remoteEmpty.style.display =
-        "none";
-    }
-  }
-}
-
-function attachScreenPreview(): void {
-  const existing =
-    document.querySelector<HTMLVideoElement>(
-      "#screenPreview",
-    );
-
-  if (!screenStream) {
-    existing?.remove();
-
-    return;
-  }
-
-  if (existing) {
-    existing.srcObject =
-      screenStream;
-
-    return;
-  }
-
-  const roomCard =
-    document.querySelector(
-      ".room-media-card",
-    );
-
-  if (!roomCard) return;
-
-  const wrapper =
-    document.createElement("div");
-
-  wrapper.className =
-    "screen-preview-card";
-
-  wrapper.innerHTML = `
-    <div class="video-label">
-      Your shared screen
+function renderAvatar(): string {
+  const user =
+    currentUser();
+
+  const avatar =
+    user?.avatar ??
+    defaultAvatar;
+
+  const colors = {
+    skinTone: [
+      ["light", "#F8D7C4"],
+      ["fair", "#F1C6A8"],
+      ["medium", "#D99A72"],
+      ["tan", "#B9784F"],
+      ["deep", "#75452F"],
+    ],
+
+    eyeColor: [
+      ["brown", "#5A321F"],
+      ["darkBrown", "#2E1A12"],
+      ["blue", "#4A90D9"],
+      ["green", "#4D8B62"],
+      ["gray", "#69727D"],
+    ],
+
+    hairColor: [
+      ["black", "#1E1B1A"],
+      ["darkBrown", "#38251C"],
+      ["brown", "#6B432D"],
+      ["blonde", "#D9AE55"],
+      ["auburn", "#8D4A32"],
+    ],
+
+    shirtColor: [
+      ["orange", "#F47A32"],
+      ["blue", "#4E83C4"],
+      ["green", "#5C9B75"],
+      ["purple", "#8468B4"],
+      ["pink", "#D9829A"],
+      ["yellow", "#D9B84A"],
+      ["white", "#F5F3EF"],
+      ["black", "#252525"],
+    ],
+  } as const;
+
+  const optionGroup = (
+    key: keyof typeof colors,
+    title: string,
+  ) => `
+    <div class="avatar-option-group">
+      <h3>
+        ${title}
+      </h3>
+
+      <div class="swatch-row">
+        ${colors[key]
+          .map(
+            ([value, color]) => `
+              <button
+                class="swatch ${
+                  avatar[key] === value
+                    ? "selected"
+                    : ""
+                }"
+                style="--swatch:${color}"
+                data-avatar-key="${key}"
+                data-avatar-color="${value}"
+                aria-label="${value}"
+              ></button>
+            `,
+          )
+          .join("")}
+      </div>
     </div>
-
-    <video
-      id="screenPreview"
-      autoplay
-      playsinline
-      muted
-    ></video>
   `;
 
-  roomCard.appendChild(wrapper);
+  return shell(`
+    ${pageHeader(
+      "Identity",
+      "Choose your avatar",
+      "A simple 2D avatar — no profile photo required.",
+    )}
 
-  const video =
-    wrapper.querySelector<HTMLVideoElement>(
-      "#screenPreview",
-    );
+    <section class="avatar-editor">
+      <div class="avatar-preview">
+        ${avatarMarkup(
+          avatar,
+          190,
+        )}
+      </div>
 
-  if (video) {
-    video.srcObject =
-      screenStream;
+      <div class="avatar-options">
+        ${optionGroup(
+          "skinTone",
+          "Skin",
+        )}
+
+        ${optionGroup(
+          "eyeColor",
+          "Eyes",
+        )}
+
+        ${optionGroup(
+          "hairColor",
+          "Hair color",
+        )}
+
+        <div class="avatar-option-group">
+          <h3>
+            Hair style
+          </h3>
+
+          <div class="choice-row">
+            ${
+              [
+                "short",
+                "medium",
+                "long",
+                "ponytail",
+                "bob",
+                "hijab",
+              ]
+                .map(
+                  (v) => `
+                    <button
+                      class="choice-btn ${
+                        avatar.hairStyle === v
+                          ? "selected"
+                          : ""
+                      }"
+                      data-avatar-key="hairStyle"
+                      data-avatar-color="${v}"
+                    >
+                      ${v}
+                    </button>
+                  `,
+                )
+                .join("")
+            }
+          </div>
+        </div>
+
+        ${optionGroup(
+          "shirtColor",
+          "Top",
+        )}
+
+        <button
+          class="primary-btn"
+          data-action="saveAvatar"
+        >
+          Save avatar
+        </button>
+      </div>
+    </section>
+  `);
+}
+
+function renderLevelTest(): string {
+  const question =
+    levelTestQuestions[
+      levelTestIndex
+    ];
+
+  if (!question) {
+    return shell(`
+      <div class="empty-state">
+        <h2>
+          Level test complete
+        </h2>
+
+        <button
+          class="primary-btn small"
+          data-action="home"
+        >
+          Continue
+        </button>
+      </div>
+    `);
   }
-}
 
-function copyRoomId(): void {
-  if (!currentRoomPeerId) {
-    showToast(
-      "Your Room ID is not ready yet.",
-    );
+  return shell(`
+    ${pageHeader(
+      "Assessment",
+      "Level Test",
+      "Progressive assessment from A1 to C2. Maximum 50 questions.",
+    )}
 
-    return;
-  }
+    <div class="test-card">
+      <div class="test-top">
+        <span>
+          Question ${
+            levelTestIndex + 1
+          } / ${
+            Math.min(
+              50,
+              levelTestQuestions.length,
+            )
+          }
+        </span>
 
-  navigator.clipboard
-    ?.writeText(currentRoomPeerId)
-    .then(() => {
-      showToast(
-        "Room ID copied.",
-      );
-    })
-    .catch(() => {
-      showToast(
-        "Copy failed. Copy the Room ID manually.",
-      );
-    });
-}
+        <span>
+          ${esc(question.level)}
+        </span>
+      </div>
 
-function openGoogleTranslate(
-  text: string,
-): void {
-  const encoded =
-    encodeURIComponent(
-      text.trim(),
-    );
-
-  const url = encoded
-    ? `https://translate.google.com/?sl=en&tl=ar&text=${encoded}&op=translate`
-    : "https://translate.google.com/";
-
-  window.open(
-    url,
-    "_blank",
-    "noopener,noreferrer",
-  );
-}
-
-/* =========================================================
-   ACTIONS
-   ========================================================= */
-
-function handleAction(
-  action: string,
-  element: HTMLElement,
-): void {
-  switch (action) {
-    case "start":
-      navigate("auth");
-      break;
-
-    case "welcome":
-      navigate("welcome");
-      break;
-
-    case "auth":
-      navigate("auth");
-      break;
-
-    case "signup":
-      navigate("signup");
-      break;
-
-    case "login":
-      navigate("login");
-      break;
-
-    case "home":
-      navigate("home");
-      break;
-
-    case "library":
-      navigate("library");
-      break;
-
-    case "vocabulary":
-      navigate("vocabulary");
-      break;
-
-    case "practice":
-      navigate("practice");
-      break;
-
-    case "rooms":
-      createPeer();
-      navigate("rooms");
-      break;
-
-    case "games":
-      navigate("games");
-      break;
-
-    case "progress":
-      navigate("progress");
-      break;
-
-    case "profile":
-      navigate("profile");
-      break;
-
-    case "avatar":
-      navigate("avatar");
-      break;
-
-    case "saveAvatar":
-      saveState();
-      navigate("home");
-      break;
-
-    case "completeArticle": {
-      const articleId =
-        element.dataset.articleId;
-
-      if (!articleId) return;
-
-      if (
-        !state.completedArticles.includes(
-          articleId,
-        )
-      ) {
-        state.completedArticles.push(
-          articleId,
-        );
-
-        saveState();
-
-        showToast(
-          "Article completed ✓",
-        );
+      ${
+        question.passage
+          ? `
+            <div class="passage">
+              ${esc(
+                question.passage,
+              )}
+            </div>
+          `
+          : ""
       }
 
-      render();
-      break;
-    }
+      <h2>
+        ${esc(
+          question.question,
+        )}
+      </h2>
 
-    case "clearVocabulary":
-      state.vocabulary = [];
+      ${
+        question.options?.length
+          ? `
+            <div class="answer-list">
+              ${question.options
+                .map(
+                  (o) => `
+                    <button
+                      class="answer-option"
+                      data-test-answer="${esc(
+                        o,
+                      )}"
+                    >
+                      ${esc(o)}
+                    </button>
+                  `,
+                )
+                .join("")}
+            </div>
+          `
+          : `
+            <textarea
+              id="writingAnswer"
+              class="text-area"
+              placeholder="${esc(
+                question.writingPrompt ||
+                  "Write your answer",
+              )}"
+            ></textarea>
 
-      saveState();
-
-      showToast(
-        "Vocabulary cleared",
-      );
-
-      render();
-      break;
-
-    case "nextQuestion":
-      if (
-        currentPracticeIndex ===
-        practiceQuestions.length - 1
-      ) {
-        currentPracticeIndex = 0;
-        practiceAnswered = false;
-        lastAnswer = -1;
-
-        showToast(
-          "Practice complete! 🎉",
-        );
-
-        render();
-      } else {
-        currentPracticeIndex += 1;
-        practiceAnswered = false;
-        lastAnswer = -1;
-
-        render();
+            <button
+              class="primary-btn small"
+              data-action="submitWriting"
+            >
+              Continue
+            </button>
+          `
       }
-
-      break;
-
-    case "joinRoom": {
-      createPeer();
-      navigate("rooms");
-      break;
-    }
-
-    case "joinRealRoom": {
-      const input =
-        document.querySelector<HTMLInputElement>(
-          "#roomPeerId",
-        );
-
-      const remoteId =
-        input?.value || "";
-
-      void joinRealRoom(
-        remoteId,
-      );
-
-      break;
-    }
-
-    case "startCamera":
-      void startCamera();
-      break;
-
-    case "shareScreen":
-      void shareScreen();
-      break;
-
-    case "stopScreen":
-      stopScreenSharing();
-      break;
-
-    case "leaveRoom":
-      leaveRoom();
-      break;
-
-    case "copyRoomId":
-      copyRoomId();
-      break;
-
-    case "translate": {
-      const textarea =
-        document.querySelector<HTMLTextAreaElement>(
-          "#translateText",
-        );
-
-      openGoogleTranslate(
-        textarea?.value || "",
-      );
-
-      break;
-    }
-
-    case "logout":
-      leaveRoom();
-
-      state.name = "";
-      state.email = "";
-      state.vocabulary = [];
-      state.completedArticles = [];
-      state.practiceScore = 0;
-
-      localStorage.removeItem(
-        STORAGE_KEY,
-      );
-
-      navigate("welcome");
-
-      break;
-  }
+    </div>
+  `);
 }
 
-/* =========================================================
-   RENDER
-   ========================================================= */
+function renderWelcomeScreen(): string {
+  return welcomePageMarkup();
+}
 
 function render(): void {
   switch (state.page) {
     case "welcome":
       app.innerHTML =
-        renderWelcome();
+        renderWelcomeScreen();
       break;
 
     case "auth":
       app.innerHTML =
-        renderAuth();
+        welcomePageMarkup();
       break;
 
     case "signup":
       app.innerHTML =
-        renderSignup();
+        signupPageMarkup();
       break;
 
     case "login":
       app.innerHTML =
-        renderLogin();
+        loginPageMarkup();
       break;
 
     case "avatar":
       app.innerHTML =
         renderAvatar();
+      break;
+
+    case "levelTest":
+      app.innerHTML =
+        renderLevelTest();
       break;
 
     case "home":
@@ -2873,6 +1702,11 @@ function render(): void {
         renderRooms();
       break;
 
+    case "messages":
+      app.innerHTML =
+        renderMessages();
+      break;
+
     case "games":
       app.innerHTML =
         renderGames();
@@ -2887,79 +1721,52 @@ function render(): void {
       app.innerHTML =
         renderProfile();
       break;
+
+    default:
+      app.innerHTML =
+        renderWelcomeScreen();
   }
 
   bindEvents();
 }
-
-/* =========================================================
-   EVENTS
-   ========================================================= */
 
 function bindEvents(): void {
   document
     .querySelectorAll<HTMLElement>(
       "[data-action]",
     )
-    .forEach((element) => {
-      element.addEventListener(
+    .forEach((el) => {
+      el.addEventListener(
         "click",
-        () => {
-          const action =
-            element.dataset.action;
-
-          if (!action) return;
-
+        () =>
           handleAction(
-            action,
-            element,
-          );
-        },
+            el.dataset.action || "",
+            el,
+          ),
       );
     });
 
   document
-    .querySelectorAll<HTMLButtonElement>(
-      "[data-avatar-key]",
-    )
-    .forEach((button) => {
-      button.addEventListener(
-        "click",
-        () => {
-          const key =
-            button.dataset.avatarKey as keyof Avatar;
-
-          const color =
-            button.dataset.avatarColor;
-
-          if (!key || !color) return;
-
-          state.avatar[key] =
-            color;
-
-          render();
-        },
-      );
-    });
-
-  document
-    .querySelectorAll<HTMLButtonElement>(
+    .querySelectorAll<HTMLElement>(
       "[data-level]",
     )
-    .forEach((button) => {
-      button.addEventListener(
+    .forEach((el) => {
+      el.addEventListener(
         "click",
         () => {
-          const level =
-            button.dataset.level;
+          const value =
+            el.dataset.level;
 
           if (
-            level === "ALL" ||
-            isLevel(level)
+            value === "ALL" ||
+            LEVELS.includes(
+              value as Level,
+            )
           ) {
             state.selectedLibraryLevel =
-              level;
+              value as Level;
 
+            persist();
             render();
           }
         },
@@ -2967,274 +1774,720 @@ function bindEvents(): void {
     });
 
   document
-    .querySelectorAll<HTMLButtonElement>(
-      "[data-topic]",
+    .querySelector<HTMLSelectElement>(
+      "#topicFilter",
     )
-    .forEach((button) => {
-      button.addEventListener(
-        "click",
-        () => {
-          state.selectedTopic =
-            button.dataset.topic ||
-            "ALL";
+    ?.addEventListener(
+      "change",
+      (e) => {
+        state.selectedTopic =
+          (
+            e.target as HTMLSelectElement
+          ).value;
 
-          render();
-        },
-      );
-    });
+        persist();
+        render();
+      },
+    );
 
   document
-    .querySelectorAll<HTMLButtonElement>(
+    .querySelectorAll<HTMLElement>(
       "[data-article-id]",
     )
-    .forEach((button) => {
-      button.addEventListener(
+    .forEach((el) => {
+      el.addEventListener(
         "click",
         () => {
-          const articleId =
-            button.dataset.articleId;
-
-          if (!articleId) return;
-
           state.currentArticleId =
-            articleId;
+            el.dataset.articleId ||
+            null;
 
-          state.page =
-            "article";
-
-          render();
+          navigate("article");
         },
       );
     });
 
   document
-    .querySelectorAll<HTMLButtonElement>(
+    .querySelectorAll<HTMLElement>(
       "[data-word]",
     )
-    .forEach((button) => {
-      button.addEventListener(
+    .forEach((el) => {
+      el.addEventListener(
         "click",
         () => {
           const word =
-            button.dataset.word;
+            el.dataset.word || "";
 
-          if (!word) return;
-
-          if (
-            !state.vocabulary.includes(
-              word,
-            )
-          ) {
-            state.vocabulary.push(
-              word,
-            );
-
-            saveState();
-
-            showToast(
-              `"${word}" saved to Vocabulary`,
-            );
-          } else {
-            showToast(
-              `"${word}" is already saved`,
-            );
+          if (!word) {
+            return;
           }
 
-          render();
+          if (
+            !state.vocabulary.some(
+              (v) =>
+                v.word.toLowerCase() ===
+                word.toLowerCase(),
+            )
+          ) {
+            const item: VocabularyWord =
+              {
+                id: `vocab-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .slice(2, 8)}`,
+
+                word,
+
+                meaning:
+                  "Saved from Library",
+
+                example: "",
+
+                articleId:
+                  state.currentArticleId ||
+                  "",
+
+                savedAt:
+                  new Date().toISOString(),
+              };
+
+            state =
+              addVocabularyWord(
+                state,
+              );
+
+            state.vocabulary = [
+              ...state.vocabulary,
+              item,
+            ];
+
+            persist();
+            render();
+          }
         },
       );
     });
 
   document
-    .querySelectorAll<HTMLButtonElement>(
+    .querySelectorAll<HTMLElement>(
       "[data-remove-word]",
     )
-    .forEach((button) => {
-      button.addEventListener(
+    .forEach((el) => {
+      el.addEventListener(
         "click",
         () => {
-          const word =
-            button.dataset.removeWord;
-
-          if (!word) return;
-
           state.vocabulary =
             state.vocabulary.filter(
-              (item) =>
-                item !== word,
+              (v) =>
+                v.id !==
+                el.dataset.removeWord,
             );
 
-          saveState();
-
+          persist();
           render();
         },
       );
     });
 
   document
-    .querySelectorAll<HTMLButtonElement>(
+    .querySelectorAll<HTMLElement>(
       "[data-answer-index]",
     )
-    .forEach((button) => {
-      button.addEventListener(
+    .forEach((el) => {
+      el.addEventListener(
         "click",
         () => {
-          if (practiceAnswered)
+          if (practiceAnswered) {
             return;
+          }
 
-          const answerIndex =
+          const item =
+            practiceBank[
+              practiceIndex
+            ];
+
+          if (
             Number(
-              button.dataset
-                .answerIndex,
-            );
-
-          if (
-            Number.isNaN(
-              answerIndex,
-            )
+              el.dataset.answerIndex,
+            ) === item.c
           ) {
-            return;
+            state.practiceScore += 1;
           }
 
-          lastAnswer =
-            answerIndex;
+          practiceAnswered = true;
 
-          practiceAnswered =
-            true;
-
-          if (
-            answerIndex ===
-            practiceQuestions[
-              currentPracticeIndex
-            ].correct
-          ) {
-            state.practiceScore +=
-              1;
-
-            saveState();
-          }
-
+          persist();
           render();
         },
       );
     });
 
-  const signupForm =
-    document.querySelector<HTMLFormElement>(
+  document
+    .querySelectorAll<HTMLElement>(
+      "[data-test-answer]",
+    )
+    .forEach((el) => {
+      el.addEventListener(
+        "click",
+        () =>
+          submitTestAnswer(
+            el.dataset.testAnswer ||
+              "",
+          ),
+      );
+    });
+
+  document
+    .querySelectorAll<HTMLElement>(
+      "[data-avatar-key]",
+    )
+    .forEach((el) => {
+      el.addEventListener(
+        "click",
+        () => {
+          const key =
+            el.dataset.avatarKey as keyof typeof defaultAvatar;
+
+          const value =
+            el.dataset.avatarColor;
+
+          if (
+            !key ||
+            !value ||
+            !state.user
+          ) {
+            return;
+          }
+
+          state.user.avatar = {
+            ...state.user.avatar,
+            [key]: value,
+          };
+
+          persist();
+          render();
+        },
+      );
+    });
+
+  document
+    .querySelectorAll<HTMLElement>(
+      "[data-join-room]",
+    )
+    .forEach((el) => {
+      el.addEventListener(
+        "click",
+        () =>
+          joinRoom(
+            el.dataset.joinRoom ||
+              "",
+          ),
+      );
+    });
+
+  document
+    .querySelector<HTMLFormElement>(
+      "#roomForm",
+    )
+    ?.addEventListener(
+      "submit",
+      (e) => {
+        e.preventDefault();
+
+        const fd =
+          new FormData(
+            e.currentTarget as HTMLFormElement,
+          );
+
+        if (!state.user) {
+          return;
+        }
+
+        const room =
+          createAndSaveRoom({
+            title: String(
+              fd.get("title") ||
+                "",
+            ).trim(),
+
+            language: String(
+              fd.get("language") ||
+                "English",
+            ),
+
+            level: String(
+              fd.get("level") ||
+                "A1",
+            ) as Level,
+
+            topic: String(
+              fd.get("topic") ||
+                "Reading",
+            ),
+
+            type: String(
+              fd.get("type") ||
+                "audio",
+            ) as RoomType,
+
+            gender: String(
+              fd.get("gender") ||
+                "mixed",
+            ) as RoomGender,
+
+            hostId: userId(),
+
+            maxParticipants: 8,
+          });
+
+        state.joinedRoomId =
+          room.id;
+
+        markRoomJoined(state);
+
+        persist();
+        render();
+      },
+    );
+
+  document
+    .querySelector<HTMLFormElement>(
       "#signupForm",
+    )
+    ?.addEventListener(
+      "submit",
+      handleSignup,
     );
 
-  signupForm?.addEventListener(
-    "submit",
-    (event) => {
-      event.preventDefault();
-
-      const formData =
-        new FormData(
-          signupForm,
-        );
-
-      const name =
-        String(
-          formData.get(
-            "name",
-          ) || "",
-        ).trim();
-
-      const email =
-        String(
-          formData.get(
-            "email",
-          ) || "",
-        ).trim();
-
-      const levelValue =
-        String(
-          formData.get(
-            "level",
-          ) || "B1",
-        );
-
-      if (
-        !name ||
-        !email ||
-        !isLevel(
-          levelValue,
-        )
-      ) {
-        showToast(
-          "Please complete the form.",
-        );
-
-        return;
-      }
-
-      state.name =
-        name;
-
-      state.email =
-        email;
-
-      state.level =
-        levelValue;
-
-      saveState();
-
-      navigate(
-        "avatar",
-      );
-    },
-  );
-
-  const loginForm =
-    document.querySelector<HTMLFormElement>(
+  document
+    .querySelector<HTMLFormElement>(
       "#loginForm",
+    )
+    ?.addEventListener(
+      "submit",
+      handleLogin,
     );
-
-  loginForm?.addEventListener(
-    "submit",
-    (event) => {
-      event.preventDefault();
-
-      const formData =
-        new FormData(
-          loginForm,
-        );
-
-      const email =
-        String(
-          formData.get(
-            "email",
-          ) || "",
-        ).trim();
-
-      if (!email) {
-        showToast(
-          "Please enter your email.",
-        );
-
-        return;
-      }
-
-      state.email =
-        email;
-
-      if (!state.name) {
-        state.name =
-          email.split(
-            "@",
-          )[0] ||
-          "Learner";
-      }
-
-      saveState();
-
-      navigate(
-        "home",
-      );
-    },
-  );
 }
 
-loadState();
+function handleAction(
+  action: string,
+  element: HTMLElement,
+): void {
+  switch (action) {
+    case "start":
+    case "auth":
+      navigate("signup");
+      break;
+
+    case "welcome":
+      navigate("welcome");
+      break;
+
+    case "signup":
+      navigate("signup");
+      break;
+
+    case "login":
+      navigate("login");
+      break;
+
+    case "home":
+    case "library":
+    case "vocabulary":
+    case "practice":
+    case "rooms":
+    case "messages":
+    case "games":
+    case "progress":
+    case "profile":
+      navigate(action as Page);
+      break;
+
+    case "avatar":
+      navigate("avatar");
+      break;
+
+    case "levelTest":
+      levelTestIndex = 0;
+
+      levelTestAnswers = [];
+
+      adaptiveState =
+        createAdaptiveState();
+
+      navigate("levelTest");
+      break;
+
+    case "saveAvatar":
+      if (state.user) {
+        state.user.avatar = {
+          ...state.user.avatar,
+        };
+
+        persist();
+      }
+
+      navigate("home");
+      break;
+
+    case "completeArticle": {
+      const id =
+        element.dataset.articleId;
+
+      if (
+        !id ||
+        state.completedArticles.includes(
+          id,
+        )
+      ) {
+        return;
+      }
+
+      state =
+        markArticleCompleted(
+          state,
+          id,
+        );
+
+      persist();
+      render();
+      break;
+    }
+
+    case "nextPractice":
+      practiceIndex =
+        (practiceIndex + 1) %
+        practiceBank.length;
+
+      practiceAnswered = false;
+
+      if (practiceIndex === 0) {
+        state =
+          markPracticeCompleted(
+            state,
+          );
+      }
+
+      persist();
+      render();
+      break;
+
+    case "newRoom":
+      app
+        .querySelector(
+          "#roomComposer",
+        )
+        ?.replaceWith(
+          document
+            .createRange()
+            .createContextualFragment(
+              roomComposer(),
+            ),
+        );
+
+      bindEvents();
+      break;
+
+    case "closeModal":
+      document
+        .querySelector(
+          "#roomModal",
+        )
+        ?.remove();
+
+      break;
+
+    case "logout":
+      clearStoredState();
+
+      state =
+        createDefaultState();
+
+      navigate("welcome");
+      break;
+
+    case "submitWriting":
+      submitTestAnswer(
+        (
+          document.querySelector(
+            "#writingAnswer",
+          ) as HTMLTextAreaElement
+        )?.value || "",
+      );
+
+      break;
+  }
+}
+
+function handleSignup(
+  event: SubmitEvent,
+): void {
+  event.preventDefault();
+
+  const form =
+    event.currentTarget as HTMLFormElement;
+
+  const fd =
+    new FormData(form);
+
+  const name =
+    String(
+      fd.get("name") || "",
+    ).trim();
+
+  const email =
+    String(
+      fd.get("email") || "",
+    ).trim();
+
+  const level =
+    String(
+      fd.get("level") || "A1",
+    ) as Level;
+
+  if (
+    !name ||
+    !email ||
+    !LEVELS.includes(level)
+  ) {
+    return;
+  }
+
+  const user: UserProfile = {
+    name,
+
+    email,
+
+    countryCode: "IQ",
+
+    level,
+
+    avatar: {
+      ...defaultAvatar,
+    },
+
+    xp: 0,
+
+    identityCard: null,
+
+    levelTestCompleted: false,
+
+    levelTestResult: null,
+
+    isVip: false,
+  };
+
+  state = {
+    ...createDefaultState(),
+
+    page: "avatar",
+
+    user,
+
+    isAuthenticated: true,
+  };
+
+  persist();
+  render();
+}
+
+function handleLogin(
+  event: SubmitEvent,
+): void {
+  event.preventDefault();
+
+  const form =
+    event.currentTarget as HTMLFormElement;
+
+  const fd =
+    new FormData(form);
+
+  const email =
+    String(
+      fd.get("email") || "",
+    ).trim();
+
+  if (!email) {
+    return;
+  }
+
+  const existing =
+    loadStoredState();
+
+  if (existing?.user) {
+    state = {
+      ...existing,
+      page: "home",
+      isAuthenticated: true,
+    };
+  } else {
+    state = {
+      ...createDefaultState(),
+
+      page: "home",
+
+      user: {
+        name:
+          email.split("@")[0] ||
+          "Learner",
+
+        email,
+
+        countryCode: "IQ",
+
+        level: "A1",
+
+        avatar: {
+          ...defaultAvatar,
+        },
+
+        xp: 0,
+
+        identityCard: null,
+
+        levelTestCompleted: false,
+
+        levelTestResult: null,
+      },
+
+      isAuthenticated: true,
+    };
+  }
+
+  persist();
+  render();
+}
+
+function submitTestAnswer(
+  answer: string,
+): void {
+  const question =
+    levelTestQuestions[
+      levelTestIndex
+    ];
+
+  if (!question) {
+    return;
+  }
+
+  const correct =
+    question.correctAnswer
+      ? answer ===
+        question.correctAnswer
+      : answer.trim().length > 0;
+
+  levelTestAnswers.push({
+    questionId: question.id,
+
+    answer,
+
+    isCorrect: correct,
+
+    pointsEarned: correct
+      ? question.points
+      : 0,
+  });
+
+  adaptiveState =
+    recordAdaptiveAnswer(
+      adaptiveState,
+      question,
+      answer,
+    );
+
+  const finish =
+    shouldFinishTest(
+      adaptiveState,
+    );
+
+  if (
+    finish ||
+    adaptiveState.answeredQuestionIds
+      .length >= 50
+  ) {
+    const result =
+      calculateLevelTestResult(
+        adaptiveState,
+      );
+
+    const skillValues =
+      Object.values(
+        result.skillScores,
+      );
+
+    const score =
+      skillValues.reduce(
+        (sum, item) =>
+          sum + item.correct,
+        0,
+      );
+
+    const total =
+      skillValues.reduce(
+        (sum, item) =>
+          sum + item.total,
+        0,
+      );
+
+    if (state.user) {
+      state.user.level =
+        result.overallLevel;
+
+      state.user.levelTestCompleted =
+        true;
+
+      state.user.levelTestResult =
+        null;
+    }
+
+    state.levelTestScore =
+      score;
+
+    state.levelTestTotal =
+      total;
+
+    addXP(state, 50);
+
+    persist();
+
+    navigate("home");
+
+    return;
+  }
+
+  levelTestIndex += 1;
+
+  render();
+}
+
+function joinRoom(
+  roomId: string,
+): void {
+  if (
+    !state.user ||
+    !roomId
+  ) {
+    return;
+  }
+
+  const room =
+    joinStoredRoom(
+      roomId,
+      userId(),
+      state.user.avatar.gender,
+    );
+
+  if (!room) {
+    return;
+  }
+
+  state.joinedRoomId =
+    room.id;
+
+  state =
+    markRoomJoined(state);
+
+  persist();
+  render();
+}
+
 render();
