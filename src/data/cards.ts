@@ -27,6 +27,9 @@ export interface CollectedCard
   rewardClaimed: boolean;
 }
 
+export const CARD_XP_COST = 1;
+export const CARD_XP_REWARD = 3;
+
 function createId(): string {
   return `card-${Date.now()}-${Math.random()
     .toString(36)
@@ -43,11 +46,11 @@ export function createLearningCard(
     "id" | "createdAt"
   >,
 ): LearningCard {
-  return {
+  return normalizeLearningCard({
     ...input,
     id: createId(),
     createdAt: new Date().toISOString(),
-  };
+  });
 }
 
 // ======================================================
@@ -104,17 +107,11 @@ export function normalizeLearningCard(
       card.difficulty ||
       "easy",
 
-    xpCost:
-      Math.max(
-        0,
-        card.xpCost ?? 1,
-      ),
+    // Every card costs exactly 1 XP to collect.
+    xpCost: CARD_XP_COST,
 
-    xpReward:
-      Math.max(
-        0,
-        card.xpReward ?? 3,
-      ),
+    // Every completed card rewards exactly 3 XP.
+    xpReward: CARD_XP_REWARD,
 
     createdAt:
       card.createdAt ||
@@ -163,7 +160,7 @@ export function canCollectCard(
   card: LearningCard,
   currentXp: number,
 ): boolean {
-  return currentXp >= card.xpCost;
+  return currentXp >= CARD_XP_COST;
 }
 
 export function collectCard(
@@ -265,7 +262,7 @@ export function completeCollectedCard(
     };
   }
 
-  // Already rewarded.
+  // The reward can only be claimed once.
   if (collected.rewardClaimed) {
     return {
       cards,
@@ -274,11 +271,7 @@ export function completeCollectedCard(
     };
   }
 
-  const reward =
-    Math.max(
-      0,
-      card.xpReward ?? 3,
-    );
+  const reward = CARD_XP_REWARD;
 
   const updatedCards =
     cards.map((item) =>
@@ -297,7 +290,7 @@ export function completeCollectedCard(
   return {
     cards: updatedCards,
 
-    rewardGranted: reward > 0,
+    rewardGranted: true,
 
     xpReward: reward,
   };
@@ -359,14 +352,17 @@ export function getCardsForLevelAndTopic(
   level: Level,
   topic: string,
 ): LearningCard[] {
+  const normalizedTopic =
+    topic
+      .trim()
+      .toLowerCase();
+
   return cards.filter(
     (card) =>
       card.level === level &&
       card.topic
         .toLowerCase() ===
-        topic
-          .trim()
-          .toLowerCase(),
+        normalizedTopic,
   );
 }
 
@@ -447,7 +443,7 @@ export function validateLearningCard(
     );
   }
 
-  if (!card.topic.trim()) {
+  if (!card.topic?.trim()) {
     errors.push(
       "Card topic is required.",
     );
@@ -477,4 +473,6 @@ export function validateLearningCard(
 
   return errors;
 }
+  
+  
   
