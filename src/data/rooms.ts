@@ -18,11 +18,11 @@ export type RoomGender =
   | "mixed";
 
 /**
- * Controls that the room owner can manage.
+ * Controls that the room host can manage.
  *
- * Global controls affect everyone in the room.
+ * Global controls affect everyone.
  *
- * Individual controls can override access
+ * Individual controls can disable access
  * for a specific participant.
  */
 export interface RoomControls {
@@ -43,17 +43,29 @@ export interface Room {
   topic: string;
   type: RoomType;
   gender: RoomGender;
+
+  /**
+   * Current room host.
+   *
+   * If the host leaves while other participants
+   * remain, ownership is transferred automatically.
+   */
   hostId: string;
+
   participantIds: string[];
+
+  /**
+   * Maximum number of participants.
+   * DRE2learn currently allows up to 8.
+   */
   maxParticipants: number;
+
   status: RoomStatus;
+
   createdAt: string;
   startedAt?: string;
   endedAt?: string;
 
-  /**
-   * Owner-controlled room permissions.
-   */
   controls: RoomControls;
 }
 
@@ -73,23 +85,25 @@ export interface RoomJoinUser {
   gender: AvatarGender;
 }
 
+/**
+ * Current media permissions for one user.
+ *
+ * These values are intended to be consumed by the
+ * room/media layer and then enforced by peer.ts.
+ */
+export interface RoomMediaPermissions {
+  camera: boolean;
+  microphone: boolean;
+  screenShare: boolean;
+}
+
 const MAX_ROOM_PARTICIPANTS = 8;
 const MIN_ROOM_PARTICIPANTS = 2;
 
-/**
- * Valid room status transitions.
- *
- * waiting → active
- * waiting → ended
- * active  → ended
- *
- * The same status is also allowed.
- *
- * Invalid transitions:
- * active → waiting
- * ended → waiting
- * ended → active
- */
+// ======================================================
+// STATUS TRANSITIONS
+// ======================================================
+
 const ROOM_STATUS_TRANSITIONS: Record<
   RoomStatus,
   RoomStatus[]
@@ -110,10 +124,6 @@ const ROOM_STATUS_TRANSITIONS: Record<
   ],
 };
 
-/**
- * Checks whether a room can move
- * from one status to another.
- */
 export function canTransitionRoomStatus(
   from: RoomStatus,
   to: RoomStatus,
@@ -123,12 +133,6 @@ export function canTransitionRoomStatus(
   ].includes(to);
 }
 
-/**
- * Safely changes a room status.
- *
- * If the requested transition is invalid,
- * the original room is returned unchanged.
- */
 export function setRoomStatus(
   room: Room,
   nextStatus: RoomStatus,
@@ -165,6 +169,10 @@ export function setRoomStatus(
         : room.endedAt,
   };
 }
+
+// ======================================================
+// HELPERS
+// ======================================================
 
 function createId(): string {
   return `room-${Date.now()}-${Math.random()
@@ -271,6 +279,60 @@ function isGenderAllowed(
   return false;
 }
 
+/**
+ * Removes a participant from every individual
+ * permission-denial list.
+ *
+ * This prevents stale permissions from remaining
+ * after a user leaves and later joins another room
+ * or is transferred into a different role.
+ */
+function removeParticipantFromDisabledLists(
+  controls: RoomControls,
+  userId: string,
+): RoomControls {
+  const normalizedUserId =
+    clean(userId);
+
+  return {
+    ...controls,
+
+    disabledCameraUserIds:
+      controls.disabledCameraUserIds.filter(
+        (id) =>
+          id !== normalizedUserId,
+      ),
+
+    disabledMicrophoneUserIds:
+      controls.disabledMicrophoneUserIds.filter(
+        (id) =>
+          id !== normalizedUserId,
+      ),
+
+    disabledScreenShareUserIds:
+      controls.disabledScreenShareUserIds.filter(
+        (id) =>
+          id !== normalizedUserId,
+      ),
+  };
+}
+
+/**
+ * Ensures the current host is not individually
+ * blocked by a stale participant-specific rule.
+ *
+ * Global room restrictions are intentionally preserved.
+ */
+function normalizeHostControls(
+  controls: RoomControls,
+  hostId: string,
+): RoomControls {
+  return removeParticipantFromDisabledLists(
+    controls,
+    hostId,
+  );
+}
+
 // ======================================================
 // ROOM CREATION
 // ======================================================
@@ -280,6 +342,9 @@ export function createRoom(
 ): Room {
   const timestamp =
     new Date().toISOString();
+
+  const hostId =
+    clean(input.hostId);
 
   return {
     id: createId(),
@@ -296,11 +361,12 @@ export function createRoom(
 
     gender: input.gender,
 
-    hostId: clean(input.hostId),
+    hostId,
 
-    participantIds: [
-      clean(input.hostId),
-    ].filter(Boolean),
+    participantIds:
+      hostId
+        ? [hostId]
+        : [],
 
     maxParticipants:
       normalizeMaxParticipants(
@@ -323,13 +389,33 @@ export function createRoom(
 export function normalizeRoom(
   room: Room,
 ): Room {
-  const participants = [
-    ...new Set(
-      (room.participantIds ?? [])
-        .map(clean)
-        .filter(Boolean),
-    ),
-  ];
+  const participants =
+    uniqueUserIds(
+      room.participantIds,
+    );
+
+  let hostId =
+    clean(room.hostId);
+
+  /**
+   * A room must never have a host who is not
+   * currently a participant.
+   *
+   * If possible, use the first participant
+   * as the safe fallback host.
+   */
+  if (
+    !hostId ||
+    !participants.includes(hostId)
+  ) {
+    hostId =
+      participants[0] ?? "";
+  }
+
+  const controls =
+    normalizeRoomControls(
+      room.controls,
+    );
 
   return {
     ...room,
@@ -347,8 +433,7 @@ export function normalizeRoom(
     topic:
       clean(room.topic),
 
-    hostId:
-      clean(room.hostId),
+    hostId,
 
     participantIds:
       participants,
@@ -359,8 +444,9 @@ export function normalizeRoom(
       ),
 
     controls:
-      normalizeRoomControls(
-        room.controls,
+      normalizeHostControls(
+        controls,
+        hostId,
       ),
   };
 }
@@ -382,12 +468,6 @@ export function isRoomFull(
 // JOIN PERMISSION
 // ======================================================
 
-/**
- * Checks whether a user can join a room.
- *
- * Gender-specific rooms require the user's
- * actual avatar gender to be supplied.
- */
 export function canJoinRoom(
   room: Room,
   userId: string,
@@ -446,31 +526,26 @@ export function joinRoom(
     return room;
   }
 
-  const participants =
+  if (
     room.participantIds.includes(
       normalizedId,
     )
-      ? room.participantIds
-      : [
-          ...room.participantIds,
-          normalizedId,
-        ];
+  ) {
+    return room;
+  }
 
-  const roomWithParticipant = {
+  const participants = [
+    ...room.participantIds,
+    normalizedId,
+  ];
+
+  const roomWithParticipant: Room = {
     ...room,
 
     participantIds:
       participants,
   };
 
-  /**
-   * A room starts when its first
-   * participant joins.
-   *
-   * Normally the host is already present,
-   * so joining a newly created room changes
-   * waiting → active.
-   */
   if (
     room.status === "waiting"
   ) {
@@ -494,35 +569,88 @@ export function leaveRoom(
   const normalizedId =
     clean(userId);
 
+  if (!normalizedId) {
+    return room;
+  }
+
+  if (
+    !room.participantIds.includes(
+      normalizedId,
+    )
+  ) {
+    return room;
+  }
+
   const participants =
     room.participantIds.filter(
       (id) =>
         id !== normalizedId,
     );
 
-  const updatedRoom = {
-    ...room,
-
-    participantIds:
-      participants,
-  };
+  const cleanedControls =
+    removeParticipantFromDisabledLists(
+      normalizeRoomControls(
+        room.controls,
+      ),
+      normalizedId,
+    );
 
   /**
-   * When nobody remains, the room ends.
+   * Nobody remains.
    *
-   * This is a valid:
-   * active → ended
-   * transition.
+   * The room is permanently ended.
    */
-  if (
-    participants.length === 0 &&
-    room.status !== "ended"
-  ) {
+  if (participants.length === 0) {
+    const updatedRoom: Room = {
+      ...room,
+
+      participantIds: [],
+
+      hostId: "",
+
+      controls:
+        cleanedControls,
+    };
+
     return setRoomStatus(
       updatedRoom,
       "ended",
     );
   }
+
+  /**
+   * SECURITY / OWNERSHIP RULE:
+   *
+   * If the current host leaves while other
+   * participants remain, ownership is transferred
+   * immediately to the first remaining participant.
+   *
+   * This guarantees that an active room never
+   * remains without a host.
+   */
+  const hostLeft =
+    normalizedId === room.hostId;
+
+  const nextHostId =
+    hostLeft
+      ? participants[0]
+      : room.hostId;
+
+  const updatedRoom: Room = {
+    ...room,
+
+    participantIds:
+      participants,
+
+    hostId:
+      nextHostId,
+
+    controls:
+      normalizeHostControls(
+        cleanedControls,
+        nextHostId,
+      ),
+  };
 
   return updatedRoom;
 }
@@ -531,10 +659,6 @@ export function leaveRoom(
 // END ROOM
 // ======================================================
 
-/**
- * Ends a room only when the requester
- * is the room host.
- */
 export function endRoom(
   room: Room,
   requesterId: string,
@@ -557,13 +681,9 @@ export function endRoom(
 }
 
 // ======================================================
-// OWNER PERMISSION CHECK
+// OWNER / HOST CHECK
 // ======================================================
 
-/**
- * Returns true only when the requester
- * is the owner/host of the room.
- */
 export function isRoomHost(
   room: Room,
   requesterId: string,
@@ -574,7 +694,10 @@ export function isRoomHost(
   return (
     normalizedRequesterId.length > 0 &&
     normalizedRequesterId ===
-      room.hostId
+      room.hostId &&
+    room.participantIds.includes(
+      normalizedRequesterId,
+    )
   );
 }
 
@@ -582,10 +705,6 @@ export function isRoomHost(
 // GLOBAL CAMERA CONTROL
 // ======================================================
 
-/**
- * Owner enables or disables camera
- * access for the whole room.
- */
 export function setRoomCameraEnabled(
   room: Room,
   requesterId: string,
@@ -618,10 +737,6 @@ export function setRoomCameraEnabled(
 // GLOBAL MICROPHONE CONTROL
 // ======================================================
 
-/**
- * Owner enables or disables microphone
- * access for the whole room.
- */
 export function setRoomMicrophoneEnabled(
   room: Room,
   requesterId: string,
@@ -654,10 +769,6 @@ export function setRoomMicrophoneEnabled(
 // GLOBAL SCREEN SHARE CONTROL
 // ======================================================
 
-/**
- * Owner enables or disables screen sharing
- * for the whole room.
- */
 export function setRoomScreenShareEnabled(
   room: Room,
   requesterId: string,
@@ -690,10 +801,6 @@ export function setRoomScreenShareEnabled(
 // INDIVIDUAL CAMERA CONTROL
 // ======================================================
 
-/**
- * Owner can disable or enable camera
- * for one specific participant.
- */
 export function setParticipantCameraEnabled(
   room: Room,
   requesterId: string,
@@ -757,10 +864,6 @@ export function setParticipantCameraEnabled(
 // INDIVIDUAL MICROPHONE CONTROL
 // ======================================================
 
-/**
- * Owner can disable or enable microphone
- * for one specific participant.
- */
 export function setParticipantMicrophoneEnabled(
   room: Room,
   requesterId: string,
@@ -824,10 +927,6 @@ export function setParticipantMicrophoneEnabled(
 // INDIVIDUAL SCREEN SHARE CONTROL
 // ======================================================
 
-/**
- * Owner can disable or enable screen sharing
- * for one specific participant.
- */
 export function setParticipantScreenShareEnabled(
   room: Room,
   requesterId: string,
@@ -888,13 +987,29 @@ export function setParticipantScreenShareEnabled(
 }
 
 // ======================================================
+// INTERNAL PARTICIPANT CHECK
+// ======================================================
+
+function isRoomParticipant(
+  room: Room,
+  userId: string,
+): boolean {
+  const normalizedUserId =
+    clean(userId);
+
+  return (
+    normalizedUserId.length > 0 &&
+    room.status !== "ended" &&
+    room.participantIds.includes(
+      normalizedUserId,
+    )
+  );
+}
+
+// ======================================================
 // CHECK CAMERA ACCESS
 // ======================================================
 
-/**
- * Checks whether a participant currently
- * has permission to use the camera.
- */
 export function canUseRoomCamera(
   room: Room,
   userId: string,
@@ -902,7 +1017,12 @@ export function canUseRoomCamera(
   const normalizedUserId =
     clean(userId);
 
-  if (!normalizedUserId) {
+  if (
+    !isRoomParticipant(
+      room,
+      normalizedUserId,
+    )
+  ) {
     return false;
   }
 
@@ -929,10 +1049,6 @@ export function canUseRoomCamera(
 // CHECK MICROPHONE ACCESS
 // ======================================================
 
-/**
- * Checks whether a participant currently
- * has permission to use the microphone.
- */
 export function canUseRoomMicrophone(
   room: Room,
   userId: string,
@@ -940,7 +1056,12 @@ export function canUseRoomMicrophone(
   const normalizedUserId =
     clean(userId);
 
-  if (!normalizedUserId) {
+  if (
+    !isRoomParticipant(
+      room,
+      normalizedUserId,
+    )
+  ) {
     return false;
   }
 
@@ -968,10 +1089,6 @@ export function canUseRoomMicrophone(
 // CHECK SCREEN SHARE ACCESS
 // ======================================================
 
-/**
- * Checks whether a participant currently
- * has permission to share their screen.
- */
 export function canUseRoomScreenShare(
   room: Room,
   userId: string,
@@ -979,7 +1096,12 @@ export function canUseRoomScreenShare(
   const normalizedUserId =
     clean(userId);
 
-  if (!normalizedUserId) {
+  if (
+    !isRoomParticipant(
+      room,
+      normalizedUserId,
+    )
+  ) {
     return false;
   }
 
@@ -1001,6 +1123,47 @@ export function canUseRoomScreenShare(
   }
 
   return true;
+}
+
+// ======================================================
+// MEDIA PERMISSIONS
+// ======================================================
+
+/**
+ * Returns all media permissions for a participant.
+ *
+ * This is the bridge between the room permission
+ * model and the actual PeerJS media enforcement layer.
+ *
+ * peer.ts should use these values to call:
+ *
+ * applyLocalCameraPermission(...)
+ * applyLocalMicrophonePermission(...)
+ * applyLocalScreenSharePermission(...)
+ */
+export function getRoomMediaPermissions(
+  room: Room,
+  userId: string,
+): RoomMediaPermissions {
+  return {
+    camera:
+      canUseRoomCamera(
+        room,
+        userId,
+      ),
+
+    microphone:
+      canUseRoomMicrophone(
+        room,
+        userId,
+      ),
+
+    screenShare:
+      canUseRoomScreenShare(
+        room,
+        userId,
+      ),
+  };
 }
 
 // ======================================================
@@ -1141,3 +1304,32 @@ export function validateRoomInput(
 
   return errors;
 }
+
+// ======================================================
+// SECURITY NOTE
+// ======================================================
+
+/**
+ * IMPORTANT:
+ *
+ * This module runs on the client.
+ *
+ * localStorage and PeerJS control messages are NOT
+ * a trusted security boundary.
+ *
+ * These checks protect the normal application flow,
+ * but a malicious client could modify local state
+ * or send forged PeerJS messages.
+ *
+ * Production security must later enforce:
+ *
+ * 1. Host authorization on a trusted backend/Firebase.
+ * 2. Participant membership on the server.
+ * 3. Room capacity on the server.
+ * 4. Gender-room restrictions on trusted user data.
+ * 5. Host/media-control authorization on the server.
+ * 6. Server validation of room-control changes.
+ *
+ * peer.ts remains responsible for enforcing the actual
+ * local media state after an authorized control arrives.
+ */
