@@ -1,4 +1,4 @@
-import { logoMarkup } from "../components/logo";
+import { logoMarkup } from "./logo";
 
 export function welcomePageMarkup(): string {
   return `
