@@ -6,7 +6,8 @@ export type UpdateType =
   | "maintenance"
   | "announcement"
   | "security"
-  | "education";
+  | "education"
+  | "fix";
 
 export type UpdateStatus =
   | "draft"
@@ -16,7 +17,8 @@ export type UpdateStatus =
 export interface AppUpdate {
   id: string;
   title: string;
-  message: string;
+  message?: string;
+  description?: string;
   type: UpdateType;
   status: UpdateStatus;
   createdAt: string;
@@ -27,11 +29,14 @@ export interface AppUpdate {
   version?: string;
   actionUrl?: string;
   metadata?: Record<string, string>;
+  date?: string;
+  isNew?: boolean;
 }
 
 export interface AppUpdateInput {
   title: string;
-  message: string;
+  message?: string;
+  description?: string;
   type: UpdateType;
   authorId: string;
   version?: string;
@@ -50,6 +55,7 @@ export const UPDATE_TYPE_LABELS: Record<
   announcement: "Announcement",
   security: "Security",
   education: "Learning update",
+  fix: "Bug fix",
 };
 
 export const UPDATE_STATUS_LABELS: Record<
@@ -61,14 +67,20 @@ export const UPDATE_STATUS_LABELS: Record<
   archived: "Archived",
 };
 
-function createId(prefix = "update"): string {
+function createId(
+  prefix = "update",
+): string {
   return `${prefix}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
 }
 
-function cleanString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+function cleanString(
+  value: unknown,
+): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 }
 
 function now(): string {
@@ -80,20 +92,31 @@ export function createUpdate(
 ): AppUpdate {
   const timestamp = now();
 
+  const message =
+    cleanString(input.message) ||
+    cleanString(input.description);
+
   return {
     id: createId(),
     title: cleanString(input.title),
-    message: cleanString(input.message),
+    message,
+    description: message,
     type: input.type,
     status: "draft",
     createdAt: timestamp,
     updatedAt: timestamp,
+    publishedAt: undefined,
     authorId: cleanString(input.authorId),
     featured: input.featured ?? false,
-    version: cleanString(input.version) || undefined,
+    version:
+      cleanString(input.version) ||
+      undefined,
     actionUrl:
-      cleanString(input.actionUrl) || undefined,
+      cleanString(input.actionUrl) ||
+      undefined,
     metadata: input.metadata,
+    date: timestamp,
+    isNew: true,
   };
 }
 
@@ -102,21 +125,56 @@ export function normalizeUpdate(
 ): AppUpdate {
   const timestamp = now();
 
+  const message =
+    cleanString(update.message) ||
+    cleanString(update.description);
+
   return {
     ...update,
-    id: cleanString(update.id) || createId(),
+
+    id:
+      cleanString(update.id) ||
+      createId(),
+
     title: cleanString(update.title),
-    message: cleanString(update.message),
-    authorId: cleanString(update.authorId),
+
+    message,
+
+    description: message,
+
+    authorId:
+      cleanString(update.authorId),
+
     createdAt:
-      cleanString(update.createdAt) || timestamp,
+      cleanString(update.createdAt) ||
+      timestamp,
+
     updatedAt:
-      cleanString(update.updatedAt) || timestamp,
-    featured: Boolean(update.featured),
+      cleanString(update.updatedAt) ||
+      timestamp,
+
+    publishedAt:
+      cleanString(update.publishedAt) ||
+      undefined,
+
+    featured:
+      Boolean(update.featured),
+
     version:
-      cleanString(update.version) || undefined,
+      cleanString(update.version) ||
+      undefined,
+
     actionUrl:
-      cleanString(update.actionUrl) || undefined,
+      cleanString(update.actionUrl) ||
+      undefined,
+
+    date:
+      cleanString(update.date) ||
+      cleanString(update.createdAt) ||
+      timestamp,
+
+    isNew:
+      update.isNew ?? false,
   };
 }
 
@@ -130,6 +188,8 @@ export function publishUpdate(
     status: "published",
     publishedAt: timestamp,
     updatedAt: timestamp,
+    date: timestamp,
+    isNew: true,
   };
 }
 
@@ -172,31 +232,52 @@ export function updateUpdateContent(
       AppUpdate,
       | "title"
       | "message"
+      | "description"
       | "type"
       | "version"
       | "actionUrl"
     >
   >,
 ): AppUpdate {
+  const nextMessage =
+    changes.message !== undefined
+      ? cleanString(changes.message)
+      : changes.description !== undefined
+        ? cleanString(changes.description)
+        : update.message ??
+          update.description ??
+          "";
+
   return {
     ...update,
+
     title:
       changes.title !== undefined
         ? cleanString(changes.title)
         : update.title,
-    message:
-      changes.message !== undefined
-        ? cleanString(changes.message)
-        : update.message,
-    type: changes.type ?? update.type,
+
+    message: nextMessage,
+
+    description: nextMessage,
+
+    type:
+      changes.type ??
+      update.type,
+
     version:
       changes.version !== undefined
-        ? cleanString(changes.version) || undefined
+        ? cleanString(
+            changes.version,
+          ) || undefined
         : update.version,
+
     actionUrl:
       changes.actionUrl !== undefined
-        ? cleanString(changes.actionUrl) || undefined
+        ? cleanString(
+            changes.actionUrl,
+          ) || undefined
         : update.actionUrl,
+
     updatedAt: now(),
   };
 }
@@ -206,15 +287,18 @@ export function getPublishedUpdates(
 ): AppUpdate[] {
   return updates
     .filter(
-      (update) => update.status === "published",
+      (update) =>
+        update.status === "published",
     )
     .sort(
       (a, b) =>
         new Date(
-          b.publishedAt ?? b.updatedAt,
+          b.publishedAt ??
+            b.updatedAt,
         ).getTime() -
         new Date(
-          a.publishedAt ?? a.updatedAt,
+          a.publishedAt ??
+            a.updatedAt,
         ).getTime(),
     );
 }
@@ -223,11 +307,18 @@ export function getDraftUpdates(
   updates: AppUpdate[],
 ): AppUpdate[] {
   return updates
-    .filter((update) => update.status === "draft")
+    .filter(
+      (update) =>
+        update.status === "draft",
+    )
     .sort(
       (a, b) =>
-        new Date(b.updatedAt).getTime() -
-        new Date(a.updatedAt).getTime(),
+        new Date(
+          b.updatedAt,
+        ).getTime() -
+        new Date(
+          a.updatedAt,
+        ).getTime(),
     );
 }
 
@@ -236,20 +327,28 @@ export function getArchivedUpdates(
 ): AppUpdate[] {
   return updates
     .filter(
-      (update) => update.status === "archived",
+      (update) =>
+        update.status === "archived",
     )
     .sort(
       (a, b) =>
-        new Date(b.updatedAt).getTime() -
-        new Date(a.updatedAt).getTime(),
+        new Date(
+          b.updatedAt,
+        ).getTime() -
+        new Date(
+          a.updatedAt,
+        ).getTime(),
     );
 }
 
 export function getFeaturedUpdates(
   updates: AppUpdate[],
 ): AppUpdate[] {
-  return getPublishedUpdates(updates).filter(
-    (update) => update.featured,
+  return getPublishedUpdates(
+    updates,
+  ).filter(
+    (update) =>
+      update.featured,
   );
 }
 
@@ -257,8 +356,11 @@ export function getUpdatesByType(
   updates: AppUpdate[],
   type: UpdateType,
 ): AppUpdate[] {
-  return getPublishedUpdates(updates).filter(
-    (update) => update.type === type,
+  return getPublishedUpdates(
+    updates,
+  ).filter(
+    (update) =>
+      update.type === type,
   );
 }
 
@@ -268,12 +370,18 @@ export function getUpdatesByAuthor(
 ): AppUpdate[] {
   return updates
     .filter(
-      (update) => update.authorId === authorId,
+      (update) =>
+        update.authorId ===
+        authorId,
     )
     .sort(
       (a, b) =>
-        new Date(b.updatedAt).getTime() -
-        new Date(a.updatedAt).getTime(),
+        new Date(
+          b.updatedAt,
+        ).getTime() -
+        new Date(
+          a.updatedAt,
+        ).getTime(),
     );
 }
 
@@ -285,17 +393,29 @@ export function searchUpdates(
     cleanString(query).toLowerCase();
 
   if (!normalizedQuery) {
-    return getPublishedUpdates(updates);
+    return getPublishedUpdates(
+      updates,
+    );
   }
 
-  return getPublishedUpdates(updates).filter(
+  return getPublishedUpdates(
+    updates,
+  ).filter(
     (update) =>
       update.title
         .toLowerCase()
-        .includes(normalizedQuery) ||
-      update.message
+        .includes(
+          normalizedQuery,
+        ) ||
+      (
+        update.message ??
+        update.description ??
+        ""
+      )
         .toLowerCase()
-        .includes(normalizedQuery),
+        .includes(
+          normalizedQuery,
+        ),
   );
 }
 
@@ -304,9 +424,12 @@ export function canManageUpdates(
 ): boolean {
   return (
     account.status === "active" &&
-    (account.role === "owner" ||
-      account.role === "admin") &&
-    account.permissions.publishUpdates
+    (
+      account.role === "owner" ||
+      account.role === "admin"
+    ) &&
+    account.permissions
+      .publishUpdates
   );
 }
 
@@ -316,24 +439,43 @@ export function validateUpdateInput(
   const errors: string[] = [];
 
   if (!cleanString(input.title)) {
-    errors.push("Update title is required.");
+    errors.push(
+      "Update title is required.",
+    );
   }
 
-  if (!cleanString(input.message)) {
-    errors.push("Update message is required.");
+  if (
+    !cleanString(
+      input.message ??
+        input.description,
+    )
+  ) {
+    errors.push(
+      "Update message is required.",
+    );
   }
 
   if (!cleanString(input.authorId)) {
-    errors.push("Author ID is required.");
+    errors.push(
+      "Author ID is required.",
+    );
   }
 
-  if (cleanString(input.title).length > 150) {
+  if (
+    cleanString(input.title)
+      .length > 150
+  ) {
     errors.push(
       "Update title cannot exceed 150 characters.",
     );
   }
 
-  if (cleanString(input.message).length > 5000) {
+  if (
+    cleanString(
+      input.message ??
+        input.description,
+    ).length > 5000
+  ) {
     errors.push(
       "Update message cannot exceed 5000 characters.",
     );
@@ -341,19 +483,9 @@ export function validateUpdateInput(
 
   return errors;
 }
+
+
+      
   
 
   
-    
-  
-    
-  
-  
-  
-  
-  
-
-  
-    
-        
-    
