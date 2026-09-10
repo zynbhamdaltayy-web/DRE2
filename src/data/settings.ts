@@ -1,22 +1,38 @@
 import type {
   AppLanguage,
   AppSettings,
-  LearningSettings,
-  NotificationSettings,
-  PrivacySettings,
-  ThemeMode,
+  Level,
 } from "../types";
 
-export type {
-  AppLanguage,
-  AppSettings,
-  LearningSettings,
-  NotificationSettings,
-  PrivacySettings,
-  ThemeMode,
-};
+export interface NotificationSettings {
+  pushNotifications: boolean;
+  messageNotifications: boolean;
+  followNotifications: boolean;
+  learningNotifications: boolean;
+  officialUpdates: boolean;
+}
 
-export const DEFAULT_SETTINGS: AppSettings = {
+export interface PrivacySettings {
+  profileVisible: boolean;
+  showOnlineStatus: boolean;
+  allowMessageRequests: boolean;
+  allowRoomInvites: boolean;
+}
+
+export interface LearningSettings {
+  dailyGoal: number;
+  defaultLevel: Level;
+  defaultLanguage: string;
+  autoplayAudio: boolean;
+}
+
+export type ThemeMode = "light" | "system" | "dark";
+
+export const DEFAULT_SETTINGS: AppSettings & {
+  notifications: NotificationSettings;
+  privacy: PrivacySettings;
+  learning: LearningSettings;
+} = {
   theme: "system",
   language: "ar",
 
@@ -48,6 +64,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showOnlineStatus: true,
   preferredTheme: "system",
   preferredLanguage: "ar",
+  defaultLanguage: "en",
 };
 
 function cleanString(value: unknown): string {
@@ -102,6 +119,26 @@ function cleanLanguage(
     : fallback;
 }
 
+function cleanLevel(
+  value: unknown,
+  fallback: Level,
+): Level {
+  const supported: Level[] = [
+    "A1",
+    "A2",
+    "B1",
+    "B2",
+    "C1",
+    "C2",
+  ];
+
+  return supported.includes(
+    value as Level,
+  )
+    ? (value as Level)
+    : fallback;
+}
+
 export function createDefaultSettings(): AppSettings {
   return {
     theme: DEFAULT_SETTINGS.theme,
@@ -136,6 +173,9 @@ export function createDefaultSettings(): AppSettings {
 
     preferredLanguage:
       DEFAULT_SETTINGS.preferredLanguage,
+
+    defaultLanguage:
+      DEFAULT_SETTINGS.defaultLanguage,
   };
 }
 
@@ -144,156 +184,186 @@ export function normalizeSettings(
 ): AppSettings {
   const defaults = createDefaultSettings();
 
-  const normalizedDailyGoal = Math.max(
-    1,
+  const incoming = settings as Partial<
+    AppSettings & {
+      notifications: Partial<NotificationSettings>;
+      privacy: Partial<PrivacySettings>;
+      learning: Partial<LearningSettings>;
+    }
+  >;
+
+  const rawDailyGoal =
     Number(
-      settings.learning?.dailyGoal ??
-        defaults.learning.dailyGoal,
-    ),
-  );
+      incoming.learning?.dailyGoal ??
+        defaults.learning?.dailyGoal ??
+        20,
+    );
+
+  const dailyGoal =
+    Number.isFinite(rawDailyGoal)
+      ? Math.max(
+          1,
+          Math.floor(rawDailyGoal),
+        )
+      : 20;
+
+  const defaultLevel =
+    cleanLevel(
+      incoming.learning?.defaultLevel,
+      defaults.learning?.defaultLevel ??
+        "A1",
+    );
+
+  const defaultLanguage =
+    cleanString(
+      incoming.learning?.defaultLanguage,
+    ) ||
+    defaults.learning?.defaultLanguage ||
+    "en";
 
   return {
     theme: cleanTheme(
-      settings.theme,
+      incoming.theme,
       defaults.theme,
     ),
 
     language: cleanLanguage(
-      settings.language,
+      incoming.language,
       defaults.language,
     ),
 
     notifications: {
       pushNotifications:
         cleanBoolean(
-          settings.notifications
+          incoming.notifications
             ?.pushNotifications,
           defaults.notifications
-            .pushNotifications,
+            ?.pushNotifications ??
+            true,
         ),
 
       messageNotifications:
         cleanBoolean(
-          settings.notifications
+          incoming.notifications
             ?.messageNotifications,
           defaults.notifications
-            .messageNotifications,
+            ?.messageNotifications ??
+            true,
         ),
 
       followNotifications:
         cleanBoolean(
-          settings.notifications
+          incoming.notifications
             ?.followNotifications,
           defaults.notifications
-            .followNotifications,
+            ?.followNotifications ??
+            true,
         ),
 
       learningNotifications:
         cleanBoolean(
-          settings.notifications
+          incoming.notifications
             ?.learningNotifications,
           defaults.notifications
-            .learningNotifications,
+            ?.learningNotifications ??
+            true,
         ),
 
       officialUpdates:
         cleanBoolean(
-          settings.notifications
+          incoming.notifications
             ?.officialUpdates,
           defaults.notifications
-            .officialUpdates,
+            ?.officialUpdates ??
+            true,
         ),
     },
 
     privacy: {
       profileVisible:
         cleanBoolean(
-          settings.privacy?.profileVisible,
-          defaults.privacy.profileVisible,
+          incoming.privacy?.profileVisible,
+          defaults.privacy?.profileVisible ??
+            true,
         ),
 
       showOnlineStatus:
         cleanBoolean(
-          settings.privacy?.showOnlineStatus,
-          defaults.privacy.showOnlineStatus,
+          incoming.privacy?.showOnlineStatus,
+          defaults.privacy?.showOnlineStatus ??
+            true,
         ),
 
       allowMessageRequests:
         cleanBoolean(
-          settings.privacy
+          incoming.privacy
             ?.allowMessageRequests,
           defaults.privacy
-            .allowMessageRequests,
+            ?.allowMessageRequests ??
+            true,
         ),
 
       allowRoomInvites:
         cleanBoolean(
-          settings.privacy?.allowRoomInvites,
-          defaults.privacy.allowRoomInvites,
+          incoming.privacy?.allowRoomInvites,
+          defaults.privacy?.allowRoomInvites ??
+            true,
         ),
     },
 
     learning: {
-      dailyGoal: Number.isFinite(
-        normalizedDailyGoal,
-      )
-        ? normalizedDailyGoal
-        : defaults.learning.dailyGoal,
+      dailyGoal,
 
-      defaultLevel:
-        cleanString(
-          settings.learning?.defaultLevel,
-        ) ||
-        defaults.learning.defaultLevel,
+      defaultLevel,
 
-      defaultLanguage:
-        cleanString(
-          settings.learning?.defaultLanguage,
-        ) ||
-        defaults.learning.defaultLanguage,
+      defaultLanguage,
 
       autoplayAudio:
         cleanBoolean(
-          settings.learning?.autoplayAudio,
-          defaults.learning.autoplayAudio,
+          incoming.learning?.autoplayAudio,
+          defaults.learning
+            ?.autoplayAudio ??
+            true,
         ),
     },
 
     soundEffects:
       cleanBoolean(
-        settings.soundEffects,
-        defaults.soundEffects ?? true,
+        incoming.soundEffects,
+        defaults.soundEffects,
       ),
 
     autoplayAudio:
       cleanBoolean(
-        settings.autoplayAudio,
-        defaults.autoplayAudio ?? true,
+        incoming.autoplayAudio,
+        defaults.autoplayAudio,
       ),
 
     privateMessages:
       cleanBoolean(
-        settings.privateMessages,
-        defaults.privateMessages ?? true,
+        incoming.privateMessages,
+        defaults.privateMessages,
       ),
 
     showOnlineStatus:
       cleanBoolean(
-        settings.showOnlineStatus,
-        defaults.showOnlineStatus ?? true,
+        incoming.showOnlineStatus,
+        defaults.showOnlineStatus,
       ),
 
     preferredTheme:
       cleanTheme(
-        settings.preferredTheme,
-        defaults.preferredTheme ?? "system",
+        incoming.preferredTheme,
+        defaults.preferredTheme,
       ),
 
     preferredLanguage:
       cleanLanguage(
-        settings.preferredLanguage,
-        defaults.preferredLanguage ?? "ar",
+        incoming.preferredLanguage,
+        defaults.preferredLanguage,
       ),
+
+    defaultLanguage,
   };
 }
 
@@ -327,7 +397,7 @@ export function updateNotificationSetting(
   return normalizeSettings({
     ...settings,
     notifications: {
-      ...settings.notifications,
+      ...(settings.notifications ?? {}),
       [key]: value,
     },
   });
@@ -341,7 +411,7 @@ export function updatePrivacySetting(
   return normalizeSettings({
     ...settings,
     privacy: {
-      ...settings.privacy,
+      ...(settings.privacy ?? {}),
       [key]: value,
     },
   });
@@ -354,7 +424,7 @@ export function updateLearningSetting(
   return normalizeSettings({
     ...settings,
     learning: {
-      ...settings.learning,
+      ...(settings.learning ?? {}),
       ...changes,
     },
   });
