@@ -7,13 +7,19 @@ import {
 const STORAGE_KEY =
   "dre2learn-settings";
 
+const STORAGE_VERSION = 2;
+
 export interface SettingsStorageData {
+  version: number;
   settings: AppSettings;
 }
 
-const DEFAULT_DATA: SettingsStorageData = {
-  settings: createDefaultSettings(),
-};
+function createDefaultData(): SettingsStorageData {
+  return {
+    version: STORAGE_VERSION,
+    settings: createDefaultSettings(),
+  };
+}
 
 function readData(): SettingsStorageData {
   try {
@@ -21,10 +27,7 @@ function readData(): SettingsStorageData {
       localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
-      return {
-        settings:
-          createDefaultSettings(),
-      };
+      return createDefaultData();
     }
 
     const parsed: unknown =
@@ -34,37 +37,33 @@ function readData(): SettingsStorageData {
       !parsed ||
       typeof parsed !== "object"
     ) {
-      return {
-        settings:
-          createDefaultSettings(),
-      };
+      return createDefaultData();
     }
 
     const value = parsed as {
+      version?: unknown;
       settings?: unknown;
     };
 
     if (
       !value.settings ||
-      typeof value.settings !==
-        "object"
+      typeof value.settings !== "object"
     ) {
-      return {
-        settings:
-          createDefaultSettings(),
-      };
+      return createDefaultData();
     }
 
     return {
+      version:
+        typeof value.version === "number"
+          ? value.version
+          : 1,
+
       settings: normalizeSettings(
         value.settings as Partial<AppSettings>,
       ),
     };
   } catch {
-    return {
-      settings:
-        createDefaultSettings(),
-    };
+    return createDefaultData();
   }
 }
 
@@ -88,6 +87,7 @@ export function saveSettings(
     normalizeSettings(settings);
 
   writeData({
+    version: STORAGE_VERSION,
     settings: normalized,
   });
 
@@ -99,24 +99,28 @@ export function updateSettings(
 ): AppSettings {
   const current = getSettings();
 
-  return saveSettings(
-    normalizeSettings({
-      ...current,
-      ...changes,
-      notifications: {
-        ...current.notifications,
-        ...(changes.notifications ?? {}),
-      },
-      privacy: {
-        ...current.privacy,
-        ...(changes.privacy ?? {}),
-      },
-      learning: {
-        ...current.learning,
-        ...(changes.learning ?? {}),
-      },
-    }),
-  );
+  const merged: AppSettings = {
+    ...current,
+
+    ...changes,
+
+    notifications: {
+      ...current.notifications,
+      ...(changes.notifications ?? {}),
+    },
+
+    privacy: {
+      ...current.privacy,
+      ...(changes.privacy ?? {}),
+    },
+
+    learning: {
+      ...current.learning,
+      ...(changes.learning ?? {}),
+    },
+  };
+
+  return saveSettings(merged);
 }
 
 export function resetStoredSettings(): AppSettings {
@@ -124,6 +128,7 @@ export function resetStoredSettings(): AppSettings {
     createDefaultSettings();
 
   writeData({
+    version: STORAGE_VERSION,
     settings,
   });
 
@@ -136,6 +141,6 @@ export function clearSettingsStorage(): void {
 
 export function initializeSettingsStorage(): void {
   if (!localStorage.getItem(STORAGE_KEY)) {
-    writeData(DEFAULT_DATA);
+    writeData(createDefaultData());
   }
 }
