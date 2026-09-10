@@ -1,11 +1,11 @@
 import {
   createReport,
-  rejectReport,
+  normalizeReport,
   resolveReport,
+  dismissReport,
   startReportReview,
-  type CreateReportInput,
   type Report,
-  type ReportAction,
+  type ReportInput,
 } from "./reports";
 
 const STORAGE_KEY = "dre2learn-reports";
@@ -14,32 +14,63 @@ export interface ReportStorageData {
   reports: Report[];
 }
 
+const DEFAULT_DATA: ReportStorageData = {
+  reports: [],
+};
+
 function readData(): ReportStorageData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
       return {
-        reports: [],
+        ...DEFAULT_DATA,
       };
     }
 
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("reports" in parsed)
+    ) {
+      return {
+        ...DEFAULT_DATA,
+      };
+    }
+
+    const reportsValue = (
+      parsed as {
+        reports?: unknown;
+      }
+    ).reports;
+
+    if (!Array.isArray(reportsValue)) {
+      return {
+        ...DEFAULT_DATA,
+      };
+    }
 
     return {
-      reports: Array.isArray(parsed.reports)
-        ? parsed.reports
-        : [],
+      reports: reportsValue.map((item) =>
+        normalizeReport(item as Report),
+      ),
     };
   } catch {
     return {
-      reports: [],
+      ...DEFAULT_DATA,
     };
   }
 }
 
-function writeData(data: ReportStorageData): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function writeData(
+  data: ReportStorageData,
+): void {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(data),
+  );
 }
 
 export function getReportStorage(): ReportStorageData {
@@ -56,18 +87,30 @@ export function getAllReports(): Report[] {
   return readData().reports;
 }
 
-export function saveReport(report: Report): Report {
+export function saveReport(
+  report: Report,
+): Report {
   const data = readData();
 
-  data.reports.push(report);
+  const normalized = normalizeReport(report);
+
+  const existingIndex = data.reports.findIndex(
+    (item) => item.id === normalized.id,
+  );
+
+  if (existingIndex >= 0) {
+    data.reports[existingIndex] = normalized;
+  } else {
+    data.reports.push(normalized);
+  }
 
   writeData(data);
 
-  return report;
+  return normalized;
 }
 
 export function createAndSaveReport(
-  input: CreateReportInput,
+  input: ReportInput,
 ): Report {
   return saveReport(createReport(input));
 }
@@ -75,15 +118,7 @@ export function createAndSaveReport(
 export function updateReport(
   report: Report,
 ): Report {
-  const data = readData();
-
-  data.reports = data.reports.map((item) =>
-    item.id === report.id ? report : item,
-  );
-
-  writeData(data);
-
-  return report;
+  return saveReport(report);
 }
 
 export function reviewReport(
@@ -116,9 +151,7 @@ export function reviewReport(
 
 export function resolveStoredReport(
   reportId: string,
-  reviewerId: string,
-  action: ReportAction,
-  note = "",
+  resolution: string,
 ): Report | null {
   const data = readData();
 
@@ -132,9 +165,7 @@ export function resolveStoredReport(
 
   const updated = resolveReport(
     report,
-    reviewerId,
-    action,
-    note,
+    resolution,
   );
 
   data.reports = data.reports.map((item) =>
@@ -146,10 +177,9 @@ export function resolveStoredReport(
   return updated;
 }
 
-export function rejectStoredReport(
+export function dismissStoredReport(
   reportId: string,
-  reviewerId: string,
-  note = "",
+  reason = "",
 ): Report | null {
   const data = readData();
 
@@ -161,10 +191,9 @@ export function rejectStoredReport(
     return null;
   }
 
-  const updated = rejectReport(
+  const updated = dismissReport(
     report,
-    reviewerId,
-    note,
+    reason,
   );
 
   data.reports = data.reports.map((item) =>
@@ -202,8 +231,15 @@ export function clearReportStorage(): void {
 
 export function initializeReportStorage(): void {
   if (!localStorage.getItem(STORAGE_KEY)) {
-    writeData({
-      reports: [],
-    });
+    writeData(DEFAULT_DATA);
   }
 }
+
+    
+
+
+
+
+    
+    
+  
