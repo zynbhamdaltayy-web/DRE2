@@ -1,28 +1,26 @@
-import type { Level } from "../types";
+import type {
+  CardDifficulty,
+  CollectedCard as TypeCollectedCard,
+  LearningCard as TypeLearningCard,
+  LearningCardType,
+  Level,
+} from "../types";
 
-export type LearningCardType =
-  | "word"
-  | "phrase"
-  | "question"
-  | "challenge"
-  | "roleplay";
+export type { CardDifficulty, LearningCardType };
 
-export interface LearningCard {
+export interface LearningCard
+  extends Omit<
+    TypeLearningCard,
+    "id" | "createdAt"
+  > {
   id: string;
-  title: string;
-  content: string;
-  answer?: string;
-  type: LearningCardType;
-  level: Level;
-  topic: string;
-  xpCost: number;
   createdAt: string;
 }
 
-export interface CollectedCard {
-  cardId: string;
-  collectedAt: string;
+export interface CollectedCard
+  extends TypeCollectedCard {
   timesUsed: number;
+  timesPlayed: number;
 }
 
 function createId(): string {
@@ -53,8 +51,15 @@ export function normalizeLearningCard(
     title: card.title?.trim() || "Learning Card",
     content: card.content?.trim() || "",
     answer: card.answer?.trim() || undefined,
+    word: card.word?.trim() || undefined,
+    meaning: card.meaning?.trim() || undefined,
+    example: card.example?.trim() || undefined,
+    type: card.type || "word",
+    level: card.level || "A1",
     topic: card.topic?.trim() || "General",
+    difficulty: card.difficulty || "easy",
     xpCost: Math.max(0, card.xpCost ?? 0),
+    xpReward: Math.max(0, card.xpReward ?? 0),
     createdAt:
       card.createdAt ||
       new Date().toISOString(),
@@ -72,6 +77,10 @@ export function normalizeCollectedCard(
     timesUsed: Math.max(
       0,
       card.timesUsed ?? 0,
+    ),
+    timesPlayed: Math.max(
+      0,
+      card.timesPlayed ?? 0,
     ),
   };
 }
@@ -102,6 +111,7 @@ export function collectCard(
       collectedAt:
         new Date().toISOString(),
       timesUsed: 0,
+      timesPlayed: 0,
     },
   ];
 }
@@ -117,6 +127,38 @@ export function useCollectedCard(
           timesUsed: card.timesUsed + 1,
         }
       : card,
+  );
+}
+
+export function playCollectedCard(
+  cards: CollectedCard[],
+  cardId: string,
+): CollectedCard[] {
+  return cards.map((card) =>
+    card.cardId === cardId
+      ? {
+          ...card,
+          timesPlayed: card.timesPlayed + 1,
+        }
+      : card,
+  );
+}
+
+export function getCardsByType(
+  cards: LearningCard[],
+  type: LearningCardType,
+): LearningCard[] {
+  return cards.filter(
+    (card) => card.type === type,
+  );
+}
+
+export function getCardsByDifficulty(
+  cards: LearningCard[],
+  difficulty: CardDifficulty,
+): LearningCard[] {
+  return cards.filter(
+    (card) => card.difficulty === difficulty,
   );
 }
 
@@ -156,6 +198,14 @@ export function getCardsForLevelAndTopic(
   );
 }
 
+export function getMysteryCards(
+  cards: LearningCard[],
+): LearningCard[] {
+  return cards.filter(
+    (card) => card.type === "mystery",
+  );
+}
+
 export function getCollectedCardCount(
   cards: CollectedCard[],
 ): number {
@@ -176,6 +226,15 @@ export function getCardCollectionProgress(
       (collected.length / totalCards) *
         100,
     ),
+  );
+}
+
+export function getCardUsageCount(
+  card: CollectedCard,
+): number {
+  return (
+    card.timesUsed +
+    card.timesPlayed
   );
 }
 
@@ -200,11 +259,26 @@ export function validateLearningCard(
     errors.push("Card topic is required.");
   }
 
+  if (!card.type) {
+    errors.push("Card type is required.");
+  }
+
   if (card.xpCost < 0) {
     errors.push(
       "Card XP cost cannot be negative.",
     );
   }
 
+  if (
+    card.xpReward !== undefined &&
+    card.xpReward < 0
+  ) {
+    errors.push(
+      "Card XP reward cannot be negative.",
+    );
+  }
+
   return errors;
 }
+
+  
