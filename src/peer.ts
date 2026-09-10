@@ -4,8 +4,13 @@ import Peer, {
 
 export interface PeerRoomMember {
   peerId: string;
+  userId?: string;
   name: string;
   connection?: MediaConnection;
+
+  cameraEnabled: boolean;
+  microphoneEnabled: boolean;
+  screenShareEnabled: boolean;
 }
 
 export interface PeerRoomState {
@@ -13,6 +18,10 @@ export interface PeerRoomState {
   localStream: MediaStream | null;
   screenStream: MediaStream | null;
   members: Map<string, PeerRoomMember>;
+
+  cameraEnabled: boolean;
+  microphoneEnabled: boolean;
+  screenShareEnabled: boolean;
 }
 
 const roomState: PeerRoomState = {
@@ -20,9 +29,15 @@ const roomState: PeerRoomState = {
   localStream: null,
   screenStream: null,
   members: new Map(),
+
+  cameraEnabled: true,
+  microphoneEnabled: true,
+  screenShareEnabled: true,
 };
 
 let currentRoomId = "";
+
+let currentUserId = "";
 
 let incomingCallsHandlerRegistered = false;
 
@@ -38,6 +53,23 @@ export function getCurrentRoomId(): string {
   return currentRoomId;
 }
 
+export function getCurrentUserId(): string {
+  return currentUserId;
+}
+
+/**
+ * Sets the local user's ID for the current room.
+ *
+ * This is used when the room sends control messages
+ * to identify which participant must be affected.
+ */
+export function setCurrentUserId(
+  userId: string,
+): void {
+  currentUserId =
+    userId.trim();
+}
+
 // ======================================================
 // LOCAL MEDIA
 // ======================================================
@@ -48,8 +80,11 @@ export async function requestLocalMedia(
     audio?: boolean;
   } = {},
 ): Promise<MediaStream> {
-  const video = options.video ?? true;
-  const audio = options.audio ?? true;
+  const requestedVideo =
+    options.video ?? true;
+
+  const requestedAudio =
+    options.audio ?? true;
 
   if (
     !navigator.mediaDevices ||
@@ -62,11 +97,17 @@ export async function requestLocalMedia(
 
   const stream =
     await navigator.mediaDevices.getUserMedia({
-      video,
-      audio,
+      video:
+        requestedVideo &&
+        roomState.cameraEnabled,
+
+      audio:
+        requestedAudio &&
+        roomState.microphoneEnabled,
     });
 
-  roomState.localStream = stream;
+  roomState.localStream =
+    stream;
 
   return stream;
 }
@@ -74,21 +115,10 @@ export async function requestLocalMedia(
 // ======================================================
 // OUTGOING STREAM
 // ======================================================
-// Creates the stream that should be sent to a participant.
-//
-// Normal:
-//   microphone + camera
-//
-// While screen sharing:
-//   microphone + screen audio (if available)
-//   + screen video
-//
-// The camera track is intentionally replaced by the
-// screen video track while screen sharing.
-// ======================================================
 
 function getOutgoingStream(): MediaStream | null {
-  const stream = new MediaStream();
+  const stream =
+    new MediaStream();
 
   const localStream =
     roomState.localStream;
@@ -101,16 +131,25 @@ function getOutgoingStream(): MediaStream | null {
       localStream.getAudioTracks();
 
     for (const track of audioTracks) {
-      stream.addTrack(track);
+      if (
+        roomState.microphoneEnabled
+      ) {
+        stream.addTrack(track);
+      }
     }
   }
 
-  if (screenStream) {
+  if (
+    screenStream &&
+    roomState.screenShareEnabled
+  ) {
     const screenVideoTrack =
       screenStream.getVideoTracks()[0];
 
     if (screenVideoTrack) {
-      stream.addTrack(screenVideoTrack);
+      stream.addTrack(
+        screenVideoTrack,
+      );
     }
 
     const screenAudioTracks =
@@ -123,12 +162,17 @@ function getOutgoingStream(): MediaStream | null {
     return stream;
   }
 
-  if (localStream) {
+  if (
+    localStream &&
+    roomState.cameraEnabled
+  ) {
     const cameraTrack =
       localStream.getVideoTracks()[0];
 
     if (cameraTrack) {
-      stream.addTrack(cameraTrack);
+      stream.addTrack(
+        cameraTrack,
+      );
     }
   }
 
@@ -154,18 +198,24 @@ export async function startPeer(
 
   return new Promise(
     (resolve, reject) => {
-      peer.on("open", (id) => {
-        resolve(id);
-      });
+      peer.on(
+        "open",
+        (id) => {
+          resolve(id);
+        },
+      );
 
-      peer.on("error", (error) => {
-        console.error(
-          "PeerJS error:",
-          error,
-        );
+      peer.on(
+        "error",
+        (error) => {
+          console.error(
+            "PeerJS error:",
+            error,
+          );
 
-        reject(error);
-      });
+          reject(error);
+        },
+      );
     },
   );
 }
@@ -181,9 +231,18 @@ export async function createRoom(
     roomName
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
+      .replace(
+        /[^a-z0-9-]/g,
+        "-",
+      )
+      .replace(
+        /-+/g,
+        "-",
+      )
+      .replace(
+        /^-|-$/g,
+        "",
+      );
 
   const suffix =
     Math.random()
@@ -191,11 +250,16 @@ export async function createRoom(
       .slice(2, 7);
 
   const roomId =
-    `${normalized || "room"}-${suffix}`;
+    `${
+      normalized || "room"
+    }-${suffix}`;
 
-  await startPeer(roomId);
+  await startPeer(
+    roomId,
+  );
 
-  currentRoomId = roomId;
+  currentRoomId =
+    roomId;
 
   return roomId;
 }
@@ -227,8 +291,11 @@ export async function joinRoom(
 
   if (!roomState.localStream) {
     await requestLocalMedia({
-      video: true,
-      audio: true,
+      video:
+        roomState.cameraEnabled,
+
+      audio:
+        roomState.microphoneEnabled,
     });
   }
 
@@ -247,9 +314,15 @@ export async function joinRoom(
       outgoingStream,
       {
         metadata: {
-          name: localName,
+          name:
+            localName,
+
+          userId:
+            currentUserId,
+
           screenSharing:
-            roomState.screenStream !== null,
+            roomState.screenStream !==
+            null,
         },
       },
     );
@@ -284,10 +357,15 @@ export function answerIncomingCalls(
     "call",
     async (call) => {
       try {
-        if (!roomState.localStream) {
+        if (
+          !roomState.localStream
+        ) {
           await requestLocalMedia({
-            video: true,
-            audio: true,
+            video:
+              roomState.cameraEnabled,
+
+            audio:
+              roomState.microphoneEnabled,
           });
         }
 
@@ -304,9 +382,15 @@ export function answerIncomingCalls(
           call,
           call.peer,
           typeof call.metadata
-            ?.name === "string"
+            ?.name ===
+            "string"
             ? call.metadata.name
             : "Learner",
+          typeof call.metadata
+            ?.userId ===
+            "string"
+            ? call.metadata.userId
+            : undefined,
         );
       } catch (error) {
         console.error(
@@ -326,11 +410,22 @@ function registerMediaConnection(
   connection: MediaConnection,
   peerId: string,
   name: string,
+  userId?: string,
 ): void {
   const member: PeerRoomMember = {
     peerId,
+    userId,
     name,
     connection,
+
+    cameraEnabled:
+      true,
+
+    microphoneEnabled:
+      true,
+
+    screenShareEnabled:
+      true,
   };
 
   roomState.members.set(
@@ -341,57 +436,559 @@ function registerMediaConnection(
   connection.on(
     "stream",
     (remoteStream) => {
-      const event =
+      window.dispatchEvent(
         new CustomEvent(
           "dre2learn:remote-stream",
           {
             detail: {
               peerId,
-              stream: remoteStream,
+              userId,
+              stream:
+                remoteStream,
               name,
             },
           },
-        );
-
-      window.dispatchEvent(event);
+        ),
+      );
     },
   );
 
-  connection.on("close", () => {
-    roomState.members.delete(
-      peerId,
-    );
+  connection.on(
+    "data",
+    (data) => {
+      handleControlMessage(
+        peerId,
+        data,
+      );
+    },
+  );
 
-    window.dispatchEvent(
-      new CustomEvent(
-        "dre2learn:member-left",
-        {
-          detail: {
-            peerId,
+  connection.on(
+    "close",
+    () => {
+      roomState.members.delete(
+        peerId,
+      );
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "dre2learn:member-left",
+          {
+            detail: {
+              peerId,
+              userId,
+            },
           },
-        },
-      ),
-    );
-  });
+        ),
+      );
+    },
+  );
 
-  connection.on("error", (error) => {
-    console.error(
-      "Media connection error:",
-      error,
-    );
-  });
+  connection.on(
+    "error",
+    (error) => {
+      console.error(
+        "Media connection error:",
+        error,
+      );
+    },
+  );
 
-  // ----------------------------------------------------
-  // IMPORTANT:
-  // If screen sharing is already active when this
-  // participant joins, send the current screen stream
-  // to this new connection as well.
-  // ----------------------------------------------------
-
-  if (roomState.screenStream) {
+  if (
+    roomState.screenStream
+  ) {
     sendCurrentScreenToConnection(
       connection,
     );
+  }
+}
+
+// ======================================================
+// CONTROL MESSAGE TYPE
+// ======================================================
+
+type RoomControlMessage =
+  | {
+      type:
+        | "camera";
+      enabled: boolean;
+    }
+  | {
+      type:
+        | "microphone";
+      enabled: boolean;
+    }
+  | {
+      type:
+        | "screen-share";
+      enabled: boolean;
+    }
+  | {
+      type:
+        | "room-camera";
+      enabled: boolean;
+    }
+  | {
+      type:
+        | "room-microphone";
+      enabled: boolean;
+    }
+  | {
+      type:
+        | "room-screen-share";
+      enabled: boolean;
+    }
+  | {
+      type:
+        "force-stop-screen-share";
+    };
+
+// ======================================================
+// CONTROL MESSAGE HANDLER
+// ======================================================
+
+function handleControlMessage(
+  peerId: string,
+  data: unknown,
+): void {
+  if (
+    !data ||
+    typeof data !==
+      "object"
+  ) {
+    return;
+  }
+
+  const message =
+    data as Partial<RoomControlMessage>;
+
+  switch (
+    message.type
+  ) {
+    case "camera":
+    case "room-camera": {
+      const enabled =
+        message.enabled !==
+        false;
+
+      applyRemoteCameraPermission(
+        peerId,
+        enabled,
+      );
+
+      break;
+    }
+
+    case "microphone":
+    case "room-microphone": {
+      const enabled =
+        message.enabled !==
+        false;
+
+      applyRemoteMicrophonePermission(
+        peerId,
+        enabled,
+      );
+
+      break;
+    }
+
+    case "screen-share":
+    case "room-screen-share": {
+      const enabled =
+        message.enabled !==
+        false;
+
+      applyRemoteScreenSharePermission(
+        peerId,
+        enabled,
+      );
+
+      break;
+    }
+
+    case "force-stop-screen-share": {
+      if (
+        roomState.screenStream
+      ) {
+        stopScreenShare();
+      }
+
+      break;
+    }
+  }
+}
+
+// ======================================================
+// OWNER CONTROL — LOCAL CAMERA
+// ======================================================
+
+export function setLocalCameraPermission(
+  enabled: boolean,
+): void {
+  roomState.cameraEnabled =
+    enabled;
+
+  const cameraTracks =
+    roomState.localStream
+      ?.getVideoTracks() ??
+    [];
+
+  for (
+    const track of cameraTracks
+  ) {
+    track.enabled =
+      enabled;
+  }
+
+  if (!enabled) {
+    if (
+      roomState.screenStream
+    ) {
+      replaceOutgoingVideoTrack(
+        getCameraReplacementTrack(),
+      );
+    } else {
+      removeOutgoingVideoTrack();
+    }
+  } else if (
+    !roomState.screenStream
+  ) {
+    const cameraTrack =
+      roomState.localStream
+        ?.getVideoTracks()[0];
+
+    if (cameraTrack) {
+      replaceOutgoingVideoTrack(
+        cameraTrack,
+      );
+    }
+  }
+
+  broadcastControlMessage({
+    type: "camera",
+    enabled,
+  });
+}
+
+// ======================================================
+// OWNER CONTROL — LOCAL MICROPHONE
+// ======================================================
+
+export function setLocalMicrophonePermission(
+  enabled: boolean,
+): void {
+  roomState.microphoneEnabled =
+    enabled;
+
+  const microphoneTracks =
+    roomState.localStream
+      ?.getAudioTracks() ??
+    [];
+
+  for (
+    const track of microphoneTracks
+  ) {
+    track.enabled =
+      enabled;
+  }
+
+  broadcastControlMessage({
+    type: "microphone",
+    enabled,
+  });
+}
+
+// ======================================================
+// OWNER CONTROL — LOCAL SCREEN SHARE
+// ======================================================
+
+export function setLocalScreenSharePermission(
+  enabled: boolean,
+): void {
+  roomState.screenShareEnabled =
+    enabled;
+
+  if (!enabled) {
+    if (
+      roomState.screenStream
+    ) {
+      stopScreenShare();
+    }
+  }
+
+  broadcastControlMessage({
+    type:
+      "screen-share",
+    enabled,
+  });
+}
+
+// ======================================================
+// APPLY CAMERA PERMISSION
+// ======================================================
+
+function applyRemoteCameraPermission(
+  peerId: string,
+  enabled: boolean,
+): void {
+  const member =
+    roomState.members.get(
+      peerId,
+    );
+
+  if (!member) {
+    return;
+  }
+
+  member.cameraEnabled =
+    enabled;
+
+  window.dispatchEvent(
+    new CustomEvent(
+      "dre2learn:participant-camera-permission",
+      {
+        detail: {
+          peerId,
+          userId:
+            member.userId,
+          enabled,
+        },
+      },
+    ),
+  );
+}
+
+// ======================================================
+// APPLY MICROPHONE PERMISSION
+// ======================================================
+
+function applyRemoteMicrophonePermission(
+  peerId: string,
+  enabled: boolean,
+): void {
+  const member =
+    roomState.members.get(
+      peerId,
+    );
+
+  if (!member) {
+    return;
+  }
+
+  member.microphoneEnabled =
+    enabled;
+
+  window.dispatchEvent(
+    new CustomEvent(
+      "dre2learn:participant-microphone-permission",
+      {
+        detail: {
+          peerId,
+          userId:
+            member.userId,
+          enabled,
+        },
+      },
+    ),
+  );
+}
+
+// ======================================================
+// APPLY SCREEN SHARE PERMISSION
+// ======================================================
+
+function applyRemoteScreenSharePermission(
+  peerId: string,
+  enabled: boolean,
+): void {
+  const member =
+    roomState.members.get(
+      peerId,
+    );
+
+  if (!member) {
+    return;
+  }
+
+  member.screenShareEnabled =
+    enabled;
+
+  window.dispatchEvent(
+    new CustomEvent(
+      "dre2learn:participant-screen-share-permission",
+      {
+        detail: {
+          peerId,
+          userId:
+            member.userId,
+          enabled,
+        },
+      },
+    ),
+  );
+}
+
+// ======================================================
+// OWNER CONTROL — SEND TO PARTICIPANT
+// ======================================================
+
+export function sendCameraPermission(
+  peerId: string,
+  enabled: boolean,
+): boolean {
+  return sendControlMessage(
+    peerId,
+    {
+      type:
+        "camera",
+      enabled,
+    },
+  );
+}
+
+export function sendMicrophonePermission(
+  peerId: string,
+  enabled: boolean,
+): boolean {
+  return sendControlMessage(
+    peerId,
+    {
+      type:
+        "microphone",
+      enabled,
+    },
+  );
+}
+
+export function sendScreenSharePermission(
+  peerId: string,
+  enabled: boolean,
+): boolean {
+  return sendControlMessage(
+    peerId,
+    {
+      type:
+        "screen-share",
+      enabled,
+    },
+  );
+}
+
+export function forceStopParticipantScreenShare(
+  peerId: string,
+): boolean {
+  return sendControlMessage(
+    peerId,
+    {
+      type:
+        "force-stop-screen-share",
+    },
+  );
+}
+
+// ======================================================
+// OWNER CONTROL — WHOLE ROOM
+// ======================================================
+
+export function sendRoomCameraPermission(
+  enabled: boolean,
+): void {
+  roomState.cameraEnabled =
+    enabled;
+
+  broadcastControlMessage({
+    type:
+      "room-camera",
+    enabled,
+  });
+}
+
+export function sendRoomMicrophonePermission(
+  enabled: boolean,
+): void {
+  roomState.microphoneEnabled =
+    enabled;
+
+  broadcastControlMessage({
+    type:
+      "room-microphone",
+    enabled,
+  });
+}
+
+export function sendRoomScreenSharePermission(
+  enabled: boolean,
+): void {
+  roomState.screenShareEnabled =
+    enabled;
+
+  if (!enabled) {
+    if (
+      roomState.screenStream
+    ) {
+      stopScreenShare();
+    }
+  }
+
+  broadcastControlMessage({
+    type:
+      "room-screen-share",
+    enabled,
+  });
+}
+
+// ======================================================
+// SEND CONTROL MESSAGE
+// ======================================================
+
+function sendControlMessage(
+  peerId: string,
+  message: RoomControlMessage,
+): boolean {
+  const member =
+    roomState.members.get(
+      peerId,
+    );
+
+  if (
+    !member?.connection
+  ) {
+    return false;
+  }
+
+  try {
+    member.connection.send(
+      message,
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Unable to send room control:",
+      error,
+    );
+
+    return false;
+  }
+}
+
+function broadcastControlMessage(
+  message: RoomControlMessage,
+): void {
+  for (
+    const member of roomState.members.values()
+  ) {
+    try {
+      member.connection?.send(
+        message,
+      );
+    } catch (error) {
+      console.error(
+        "Unable to broadcast room control:",
+        error,
+      );
+    }
   }
 }
 
@@ -412,7 +1009,10 @@ function sendCurrentScreenToConnection(
   const screenStream =
     roomState.screenStream;
 
-  if (!screenStream) {
+  if (
+    !screenStream ||
+    !roomState.screenShareEnabled
+  ) {
     return;
   }
 
@@ -455,13 +1055,24 @@ function sendCurrentScreenToConnection(
 // ======================================================
 
 export async function startScreenShare(): Promise<MediaStream> {
-  if (roomState.screenStream) {
+  if (
+    !roomState.screenShareEnabled
+  ) {
+    throw new Error(
+      "Screen sharing has been disabled by the room owner.",
+    );
+  }
+
+  if (
+    roomState.screenStream
+  ) {
     return roomState.screenStream;
   }
 
   if (
     !navigator.mediaDevices ||
-    !navigator.mediaDevices.getDisplayMedia
+    !navigator.mediaDevices
+      .getDisplayMedia
   ) {
     throw new Error(
       "Screen sharing is not supported by this browser.",
@@ -469,10 +1080,12 @@ export async function startScreenShare(): Promise<MediaStream> {
   }
 
   const screenStream =
-    await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true,
-    });
+    await navigator.mediaDevices.getDisplayMedia(
+      {
+        video: true,
+        audio: true,
+      },
+    );
 
   roomState.screenStream =
     screenStream;
@@ -483,11 +1096,13 @@ export async function startScreenShare(): Promise<MediaStream> {
   if (!videoTrack) {
     screenStream
       .getTracks()
-      .forEach((track) =>
-        track.stop(),
+      .forEach(
+        (track) =>
+          track.stop(),
       );
 
-    roomState.screenStream = null;
+    roomState.screenStream =
+      null;
 
     throw new Error(
       "No screen video track was provided.",
@@ -502,33 +1117,25 @@ export async function startScreenShare(): Promise<MediaStream> {
     },
   );
 
-  // ----------------------------------------------------
-  // Replace camera video with screen video.
-  // ----------------------------------------------------
-
   replaceOutgoingVideoTrack(
     videoTrack,
   );
 
-  // ----------------------------------------------------
-  // Add screen audio when the browser provides it.
-  // ----------------------------------------------------
-
   addScreenAudioTracksToAllConnections();
-
-  // ----------------------------------------------------
-  // Tell the UI that screen sharing has started.
-  // ----------------------------------------------------
 
   window.dispatchEvent(
     new CustomEvent(
       "dre2learn:screen-share-started",
       {
         detail: {
-          stream: screenStream,
+          stream:
+            screenStream,
+
           hasAudio:
-            screenStream.getAudioTracks()
+            screenStream
+              .getAudioTracks()
               .length > 0,
+
           roomId:
             currentRoomId,
         },
@@ -544,7 +1151,9 @@ export async function startScreenShare(): Promise<MediaStream> {
 // ======================================================
 
 function addScreenAudioTracksToAllConnections(): void {
-  for (const member of roomState.members.values()) {
+  for (
+    const member of roomState.members.values()
+  ) {
     addScreenAudioTracksToConnection(
       member.connection,
     );
@@ -575,7 +1184,8 @@ function addScreenAudioTracksToConnection(
     screenStream.getAudioTracks();
 
   if (
-    screenAudioTracks.length === 0
+    screenAudioTracks.length ===
+    0
   ) {
     return;
   }
@@ -583,14 +1193,19 @@ function addScreenAudioTracksToConnection(
   const existingSenders =
     peerConnection.getSenders();
 
-  for (const track of screenAudioTracks) {
+  for (
+    const track of screenAudioTracks
+  ) {
     const alreadySending =
       existingSenders.some(
         (sender) =>
-          sender.track === track,
+          sender.track ===
+          track,
       );
 
-    if (alreadySending) {
+    if (
+      alreadySending
+    ) {
       continue;
     }
 
@@ -615,7 +1230,9 @@ function addScreenAudioTracksToConnection(
 function replaceOutgoingVideoTrack(
   newTrack: MediaStreamTrack,
 ): void {
-  for (const member of roomState.members.values()) {
+  for (
+    const member of roomState.members.values()
+  ) {
     const peerConnection =
       member.connection
         ?.peerConnection;
@@ -639,7 +1256,9 @@ function replaceOutgoingVideoTrack(
     }
 
     void videoSender
-      .replaceTrack(newTrack)
+      .replaceTrack(
+        newTrack,
+      )
       .catch((error) => {
         console.error(
           "Unable to replace outgoing video track:",
@@ -647,6 +1266,65 @@ function replaceOutgoingVideoTrack(
         );
       });
   }
+}
+
+// ======================================================
+// REMOVE OUTGOING VIDEO
+// ======================================================
+
+function removeOutgoingVideoTrack(): void {
+  for (
+    const member of roomState.members.values()
+  ) {
+    const peerConnection =
+      member.connection
+        ?.peerConnection;
+
+    if (!peerConnection) {
+      continue;
+    }
+
+    const videoSender =
+      peerConnection
+        .getSenders()
+        .find(
+          (sender) =>
+            sender.track?.kind ===
+            "video",
+        );
+
+    if (!videoSender) {
+      continue;
+    }
+
+    void videoSender
+      .replaceTrack(null)
+      .catch((error) => {
+        console.error(
+          "Unable to disable outgoing video:",
+          error,
+        );
+      });
+  }
+}
+
+// ======================================================
+// CAMERA REPLACEMENT
+// ======================================================
+
+function getCameraReplacementTrack():
+  MediaStreamTrack {
+  const cameraTrack =
+    roomState.localStream
+      ?.getVideoTracks()[0];
+
+  if (!cameraTrack) {
+    throw new Error(
+      "Camera track is not available.",
+    );
+  }
+
+  return cameraTrack;
 }
 
 // ======================================================
@@ -664,19 +1342,13 @@ export function stopScreenShare(): void {
   const screenAudioTracks =
     stream.getAudioTracks();
 
-  // ----------------------------------------------------
-  // Remove screen audio from every connection.
-  // ----------------------------------------------------
-
   removeScreenAudioTracksFromAllConnections(
     screenAudioTracks,
   );
 
-  // ----------------------------------------------------
-  // Stop all screen tracks.
-  // ----------------------------------------------------
-
-  for (const track of stream.getTracks()) {
+  for (
+    const track of stream.getTracks()
+  ) {
     track.removeEventListener(
       "ended",
       handleScreenShareEnded,
@@ -685,17 +1357,28 @@ export function stopScreenShare(): void {
     track.stop();
   }
 
-  roomState.screenStream = null;
+  roomState.screenStream =
+    null;
 
-  // ----------------------------------------------------
-  // Restore camera automatically.
-  // ----------------------------------------------------
+  // Restore camera if camera permission
+  // is still enabled.
+  if (
+    roomState.cameraEnabled
+  ) {
+    const cameraTrack =
+      roomState.localStream
+        ?.getVideoTracks()[0];
 
-  restoreCameraTrack();
-
-  // ----------------------------------------------------
-  // Notify the UI.
-  // ----------------------------------------------------
+    if (cameraTrack) {
+      replaceOutgoingVideoTrack(
+        cameraTrack,
+      );
+    } else {
+      removeOutgoingVideoTrack();
+    }
+  } else {
+    removeOutgoingVideoTrack();
+  }
 
   window.dispatchEvent(
     new CustomEvent(
@@ -715,7 +1398,9 @@ export function stopScreenShare(): void {
 // ======================================================
 
 function handleScreenShareEnded(): void {
-  if (!roomState.screenStream) {
+  if (
+    !roomState.screenStream
+  ) {
     return;
   }
 
@@ -729,7 +1414,9 @@ function handleScreenShareEnded(): void {
 function removeScreenAudioTracksFromAllConnections(
   screenAudioTracks: MediaStreamTrack[],
 ): void {
-  for (const member of roomState.members.values()) {
+  for (
+    const member of roomState.members.values()
+  ) {
     const peerConnection =
       member.connection
         ?.peerConnection;
@@ -741,7 +1428,9 @@ function removeScreenAudioTracksFromAllConnections(
     const senders =
       peerConnection.getSenders();
 
-    for (const sender of senders) {
+    for (
+      const sender of senders
+    ) {
       if (
         sender.track &&
         screenAudioTracks.includes(
@@ -764,37 +1453,28 @@ function removeScreenAudioTracksFromAllConnections(
 }
 
 // ======================================================
-// RESTORE CAMERA
-// ======================================================
-
-function restoreCameraTrack(): void {
-  const cameraTrack =
-    roomState.localStream
-      ?.getVideoTracks()[0];
-
-  if (!cameraTrack) {
-    return;
-  }
-
-  replaceOutgoingVideoTrack(
-    cameraTrack,
-  );
-}
-
-// ======================================================
 // MICROPHONE
 // ======================================================
 
 export function toggleMicrophone(
   enabled: boolean,
 ): void {
+  if (
+    !roomState.microphoneEnabled
+  ) {
+    enabled = false;
+  }
+
   const tracks =
     roomState.localStream
       ?.getAudioTracks() ??
     [];
 
-  for (const track of tracks) {
-    track.enabled = enabled;
+  for (
+    const track of tracks
+  ) {
+    track.enabled =
+      enabled;
   }
 }
 
@@ -805,13 +1485,22 @@ export function toggleMicrophone(
 export function toggleCamera(
   enabled: boolean,
 ): void {
+  if (
+    !roomState.cameraEnabled
+  ) {
+    enabled = false;
+  }
+
   const tracks =
     roomState.localStream
       ?.getVideoTracks() ??
     [];
 
-  for (const track of tracks) {
-    track.enabled = enabled;
+  for (
+    const track of tracks
+  ) {
+    track.enabled =
+      enabled;
   }
 }
 
@@ -820,7 +1509,9 @@ export function toggleCamera(
 // ======================================================
 
 export function leaveRoom(): void {
-  for (const member of roomState.members.values()) {
+  for (
+    const member of roomState.members.values()
+  ) {
     member.connection?.close();
   }
 
@@ -828,23 +1519,43 @@ export function leaveRoom(): void {
 
   stopScreenShare();
 
-  if (roomState.localStream) {
-    for (const track of roomState.localStream.getTracks()) {
+  if (
+    roomState.localStream
+  ) {
+    for (
+      const track of roomState.localStream.getTracks()
+    ) {
       track.stop();
     }
 
-    roomState.localStream = null;
+    roomState.localStream =
+      null;
   }
 
   if (roomState.peer) {
     roomState.peer.destroy();
-    roomState.peer = null;
+
+    roomState.peer =
+      null;
   }
 
-  currentRoomId = "";
+  currentRoomId =
+    "";
+
+  currentUserId =
+    "";
 
   incomingCallsHandlerRegistered =
     false;
+
+  roomState.cameraEnabled =
+    true;
+
+  roomState.microphoneEnabled =
+    true;
+
+  roomState.screenShareEnabled =
+    true;
 
   window.dispatchEvent(
     new CustomEvent(
@@ -852,12 +1563,13 @@ export function leaveRoom(): void {
     ),
   );
 }
-
-  
-  
-  
-
-  
-  
     
     
+            
+
+
+
+
+      
+
+  
