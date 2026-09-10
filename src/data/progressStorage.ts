@@ -1,5 +1,6 @@
 import type { AppState } from "../types";
 import {
+  getTodayDate,
   updateStreak,
   type StreakData,
 } from "./progress";
@@ -41,10 +42,12 @@ function normalizeNumber(
   return Math.max(0, numberValue);
 }
 
+/*
+ * Uses the same LOCAL calendar date as progress.ts.
+ * This is important for streaks and Daily XP.
+ */
 function todayKey(): string {
-  return new Date()
-    .toISOString()
-    .slice(0, 10);
+  return getTodayDate();
 }
 
 /* =========================================================
@@ -151,6 +154,9 @@ export function registerProgressActivity(
   const data =
     readData();
 
+  const today =
+    todayKey();
+
   const streakInput: StreakData = {
     currentStreak:
       data.currentStreak,
@@ -164,8 +170,8 @@ export function registerProgressActivity(
 
   /*
    * updateStreak() expects an AppState.
-   * This creates a complete compatible
-   * temporary AppState for streak calculation.
+   * This temporary state contains the
+   * progress data required for streak logic.
    */
   const streakState: AppState = {
     page: "home",
@@ -227,10 +233,8 @@ export function registerProgressActivity(
   const updatedStreak =
     updateStreak(
       streakState,
+      today,
     );
-
-  const today =
-    todayKey();
 
   const sameDay =
     data.lastActiveDate ===
@@ -250,9 +254,20 @@ export function registerProgressActivity(
   data.lastActiveDate =
     updatedStreak.lastActiveDate;
 
+  /*
+   * Daily XP belongs only to the current
+   * calendar day.
+   *
+   * Same day:
+   * add the new XP.
+   *
+   * New day:
+   * start Daily XP from the new amount.
+   */
   data.dailyXp =
     sameDay
-      ? data.dailyXp + earnedXp
+      ? data.dailyXp +
+        earnedXp
       : earnedXp;
 
   data.totalActivities += 1;
@@ -272,10 +287,29 @@ export function addDailyXP(
   const data =
     readData();
 
+  const today =
+    todayKey();
+
   const amount =
     normalizeNumber(xp);
 
-  data.dailyXp += amount;
+  /*
+   * If the stored Daily XP belongs to
+   * a previous day, start a new daily total.
+   *
+   * Do not change the streak here.
+   * registerProgressActivity() is responsible
+   * for recording actual learning activity
+   * and updating the streak.
+   */
+  if (
+    data.lastActiveDate !==
+    today
+  ) {
+    data.dailyXp = amount;
+  } else {
+    data.dailyXp += amount;
+  }
 
   writeData(data);
 
@@ -320,6 +354,13 @@ export function resetDailyProgress(): ProgressStorageData {
   const data =
     readData();
 
+  /*
+   * Reset ONLY today's XP.
+   *
+   * Streak, longest streak,
+   * last activity date, and total
+   * activities must remain unchanged.
+   */
   data.dailyXp = 0;
 
   writeData(data);
