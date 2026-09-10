@@ -1,4 +1,7 @@
-import type { Level } from "../types";
+import type {
+  AvatarGender,
+  Level,
+} from "../types";
 
 export type RoomType =
   | "audio"
@@ -42,6 +45,14 @@ export interface RoomInput {
   maxParticipants?: number;
 }
 
+export interface RoomJoinUser {
+  userId: string;
+  gender: AvatarGender;
+}
+
+const MAX_ROOM_PARTICIPANTS = 8;
+const MIN_ROOM_PARTICIPANTS = 2;
+
 function createId(): string {
   return `room-${Date.now()}-${Math.random()
     .toString(36)
@@ -54,6 +65,41 @@ function clean(value: unknown): string {
     : "";
 }
 
+function normalizeMaxParticipants(
+  value: number | undefined,
+): number {
+  return Math.min(
+    MAX_ROOM_PARTICIPANTS,
+    Math.max(
+      MIN_ROOM_PARTICIPANTS,
+      value ?? MAX_ROOM_PARTICIPANTS,
+    ),
+  );
+}
+
+function isGenderAllowed(
+  roomGender: RoomGender,
+  userGender?: AvatarGender,
+): boolean {
+  if (roomGender === "mixed") {
+    return true;
+  }
+
+  if (!userGender) {
+    return false;
+  }
+
+  if (roomGender === "girls") {
+    return userGender === "girl";
+  }
+
+  if (roomGender === "boys") {
+    return userGender === "boy";
+  }
+
+  return false;
+}
+
 export function createRoom(
   input: RoomInput,
 ): Room {
@@ -62,21 +108,32 @@ export function createRoom(
 
   return {
     id: createId(),
+
     title: clean(input.title),
+
     language: clean(input.language),
+
     level: input.level,
+
     topic: clean(input.topic),
+
     type: input.type,
+
     gender: input.gender,
+
     hostId: clean(input.hostId),
+
     participantIds: [
       clean(input.hostId),
     ].filter(Boolean),
-    maxParticipants: Math.max(
-      2,
-      input.maxParticipants ?? 8,
-    ),
+
+    maxParticipants:
+      normalizeMaxParticipants(
+        input.maxParticipants,
+      ),
+
     status: "waiting",
+
     createdAt: timestamp,
   };
 }
@@ -84,24 +141,40 @@ export function createRoom(
 export function normalizeRoom(
   room: Room,
 ): Room {
+  const participants = [
+    ...new Set(
+      (room.participantIds ?? [])
+        .map(clean)
+        .filter(Boolean),
+    ),
+  ];
+
   return {
     ...room,
-    id: clean(room.id) || createId(),
-    title: clean(room.title),
-    language: clean(room.language),
-    topic: clean(room.topic),
-    hostId: clean(room.hostId),
-    participantIds: [
-      ...new Set(
-        room.participantIds
-          .map(clean)
-          .filter(Boolean),
+
+    id:
+      clean(room.id) ||
+      createId(),
+
+    title:
+      clean(room.title),
+
+    language:
+      clean(room.language),
+
+    topic:
+      clean(room.topic),
+
+    hostId:
+      clean(room.hostId),
+
+    participantIds:
+      participants,
+
+    maxParticipants:
+      normalizeMaxParticipants(
+        room.maxParticipants,
       ),
-    ],
-    maxParticipants: Math.max(
-      2,
-      room.maxParticipants ?? 8,
-    ),
   };
 }
 
@@ -114,11 +187,21 @@ export function isRoomFull(
   );
 }
 
+/**
+ * Checks whether a user can join a room.
+ *
+ * Gender-specific rooms require the user's
+ * actual avatar gender to be supplied.
+ */
 export function canJoinRoom(
   room: Room,
   userId: string,
+  userGender?: AvatarGender,
 ): boolean {
-  if (!clean(userId)) {
+  const normalizedUserId =
+    clean(userId);
+
+  if (!normalizedUserId) {
     return false;
   }
 
@@ -128,10 +211,19 @@ export function canJoinRoom(
 
   if (
     room.participantIds.includes(
-      userId,
+      normalizedUserId,
     )
   ) {
     return true;
+  }
+
+  if (
+    !isGenderAllowed(
+      room.gender,
+      userGender,
+    )
+  ) {
+    return false;
   }
 
   return !isRoomFull(room);
@@ -140,11 +232,17 @@ export function canJoinRoom(
 export function joinRoom(
   room: Room,
   userId: string,
+  userGender?: AvatarGender,
 ): Room {
-  const normalizedId = clean(userId);
+  const normalizedId =
+    clean(userId);
 
   if (
-    !canJoinRoom(room, normalizedId)
+    !canJoinRoom(
+      room,
+      normalizedId,
+      userGender,
+    )
   ) {
     return room;
   }
@@ -161,11 +259,15 @@ export function joinRoom(
 
   return {
     ...room,
-    participantIds: participants,
+
+    participantIds:
+      participants,
+
     status:
       participants.length > 0
         ? "active"
         : room.status,
+
     startedAt:
       room.startedAt ??
       new Date().toISOString(),
@@ -176,18 +278,26 @@ export function leaveRoom(
   room: Room,
   userId: string,
 ): Room {
+  const normalizedId =
+    clean(userId);
+
   const participants =
     room.participantIds.filter(
-      (id) => id !== userId,
+      (id) =>
+        id !== normalizedId,
     );
 
   return {
     ...room,
-    participantIds: participants,
+
+    participantIds:
+      participants,
+
     status:
       participants.length === 0
         ? "ended"
         : room.status,
+
     endedAt:
       participants.length === 0
         ? new Date().toISOString()
@@ -195,13 +305,36 @@ export function leaveRoom(
   };
 }
 
+/**
+ * Ends a room only when the requester
+ * is the room host.
+ */
 export function endRoom(
   room: Room,
+  requesterId: string,
 ): Room {
+  const normalizedRequesterId =
+    clean(requesterId);
+
+  if (
+    !normalizedRequesterId ||
+    normalizedRequesterId !==
+      room.hostId
+  ) {
+    return room;
+  }
+
+  if (room.status === "ended") {
+    return room;
+  }
+
   return {
     ...room,
+
     status: "ended",
-    endedAt: new Date().toISOString(),
+
+    endedAt:
+      new Date().toISOString(),
   };
 }
 
@@ -215,8 +348,12 @@ export function getActiveRooms(
     )
     .sort(
       (a, b) =>
-        new Date(b.createdAt).getTime() -
-        new Date(a.createdAt).getTime(),
+        new Date(
+          b.createdAt,
+        ).getTime() -
+        new Date(
+          a.createdAt,
+        ).getTime(),
     );
 }
 
@@ -224,8 +361,11 @@ export function getRoomsByLevel(
   rooms: Room[],
   level: Level,
 ): Room[] {
-  return getActiveRooms(rooms).filter(
-    (room) => room.level === level,
+  return getActiveRooms(
+    rooms,
+  ).filter(
+    (room) =>
+      room.level === level,
   );
 }
 
@@ -236,9 +376,12 @@ export function getRoomsByLanguage(
   const normalized =
     clean(language).toLowerCase();
 
-  return getActiveRooms(rooms).filter(
+  return getActiveRooms(
+    rooms,
+  ).filter(
     (room) =>
-      room.language.toLowerCase() ===
+      room.language
+        .toLowerCase() ===
       normalized,
   );
 }
@@ -247,8 +390,13 @@ export function getRoomsByHost(
   rooms: Room[],
   hostId: string,
 ): Room[] {
+  const normalizedHostId =
+    clean(hostId);
+
   return rooms.filter(
-    (room) => room.hostId === hostId,
+    (room) =>
+      room.hostId ===
+      normalizedHostId,
   );
 }
 
@@ -264,7 +412,9 @@ export function validateRoomInput(
   const errors: string[] = [];
 
   if (!clean(input.title)) {
-    errors.push("Room title is required.");
+    errors.push(
+      "Room title is required.",
+    );
   }
 
   if (!clean(input.language)) {
@@ -274,12 +424,37 @@ export function validateRoomInput(
   }
 
   if (!clean(input.topic)) {
-    errors.push("Room topic is required.");
+    errors.push(
+      "Room topic is required.",
+    );
   }
 
   if (!clean(input.hostId)) {
-    errors.push("Room host is required.");
+    errors.push(
+      "Room host is required.",
+    );
+  }
+
+  if (
+    input.maxParticipants !==
+      undefined &&
+    (
+      input.maxParticipants <
+        MIN_ROOM_PARTICIPANTS ||
+      input.maxParticipants >
+        MAX_ROOM_PARTICIPANTS
+    )
+  ) {
+    errors.push(
+      `Room size must be between ${MIN_ROOM_PARTICIPANTS} and ${MAX_ROOM_PARTICIPANTS} participants.`,
+    );
   }
 
   return errors;
 }
+
+
+    
+  
+        
+
