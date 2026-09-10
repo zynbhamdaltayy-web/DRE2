@@ -340,7 +340,7 @@ export function getLevelProgressPercentage(
    STREAK SYSTEM
 ------------------------------------------------------- */
 
-interface StreakData {
+export interface StreakData {
   currentStreak: number;
   longestStreak: number;
   lastActiveDate: string;
@@ -829,5 +829,20 @@ export function getProgressStatistics(
       isStreakActive(state),
   };
 }
-    
  
+
+  
+      
+        
+  
+  
+  
+    
+  
+        
+
+  
+    
+  
+    
+      
