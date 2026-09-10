@@ -17,6 +17,24 @@ export type RoomGender =
   | "boys"
   | "mixed";
 
+/**
+ * Controls that the room owner can manage.
+ *
+ * Global controls affect everyone in the room.
+ *
+ * Individual controls can override access
+ * for a specific participant.
+ */
+export interface RoomControls {
+  cameraEnabled: boolean;
+  microphoneEnabled: boolean;
+  screenShareEnabled: boolean;
+
+  disabledCameraUserIds: string[];
+  disabledMicrophoneUserIds: string[];
+  disabledScreenShareUserIds: string[];
+}
+
 export interface Room {
   id: string;
   title: string;
@@ -32,6 +50,11 @@ export interface Room {
   createdAt: string;
   startedAt?: string;
   endedAt?: string;
+
+  /**
+   * Owner-controlled room permissions.
+   */
+  controls: RoomControls;
 }
 
 export interface RoomInput {
@@ -77,6 +100,64 @@ function normalizeMaxParticipants(
   );
 }
 
+function uniqueUserIds(
+  values: unknown,
+): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      values
+        .map(clean)
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function createDefaultRoomControls(): RoomControls {
+  return {
+    cameraEnabled: true,
+    microphoneEnabled: true,
+    screenShareEnabled: true,
+
+    disabledCameraUserIds: [],
+    disabledMicrophoneUserIds: [],
+    disabledScreenShareUserIds: [],
+  };
+}
+
+function normalizeRoomControls(
+  controls?: Partial<RoomControls>,
+): RoomControls {
+  return {
+    cameraEnabled:
+      controls?.cameraEnabled !== false,
+
+    microphoneEnabled:
+      controls?.microphoneEnabled !== false,
+
+    screenShareEnabled:
+      controls?.screenShareEnabled !== false,
+
+    disabledCameraUserIds:
+      uniqueUserIds(
+        controls?.disabledCameraUserIds,
+      ),
+
+    disabledMicrophoneUserIds:
+      uniqueUserIds(
+        controls?.disabledMicrophoneUserIds,
+      ),
+
+    disabledScreenShareUserIds:
+      uniqueUserIds(
+        controls?.disabledScreenShareUserIds,
+      ),
+  };
+}
+
 function isGenderAllowed(
   roomGender: RoomGender,
   userGender?: AvatarGender,
@@ -99,6 +180,10 @@ function isGenderAllowed(
 
   return false;
 }
+
+// ======================================================
+// ROOM CREATION
+// ======================================================
 
 export function createRoom(
   input: RoomInput,
@@ -135,8 +220,15 @@ export function createRoom(
     status: "waiting",
 
     createdAt: timestamp,
+
+    controls:
+      createDefaultRoomControls(),
   };
 }
+
+// ======================================================
+// ROOM NORMALIZATION
+// ======================================================
 
 export function normalizeRoom(
   room: Room,
@@ -175,8 +267,17 @@ export function normalizeRoom(
       normalizeMaxParticipants(
         room.maxParticipants,
       ),
+
+    controls:
+      normalizeRoomControls(
+        room.controls,
+      ),
   };
 }
+
+// ======================================================
+// ROOM CAPACITY
+// ======================================================
 
 export function isRoomFull(
   room: Room,
@@ -186,6 +287,10 @@ export function isRoomFull(
     room.maxParticipants
   );
 }
+
+// ======================================================
+// JOIN PERMISSION
+// ======================================================
 
 /**
  * Checks whether a user can join a room.
@@ -228,6 +333,10 @@ export function canJoinRoom(
 
   return !isRoomFull(room);
 }
+
+// ======================================================
+// JOIN ROOM
+// ======================================================
 
 export function joinRoom(
   room: Room,
@@ -274,6 +383,10 @@ export function joinRoom(
   };
 }
 
+// ======================================================
+// LEAVE ROOM
+// ======================================================
+
 export function leaveRoom(
   room: Room,
   userId: string,
@@ -304,6 +417,10 @@ export function leaveRoom(
         : room.endedAt,
   };
 }
+
+// ======================================================
+// END ROOM
+// ======================================================
 
 /**
  * Ends a room only when the requester
@@ -338,6 +455,457 @@ export function endRoom(
   };
 }
 
+// ======================================================
+// OWNER PERMISSION CHECK
+// ======================================================
+
+/**
+ * Returns true only when the requester
+ * is the owner/host of the room.
+ */
+export function isRoomHost(
+  room: Room,
+  requesterId: string,
+): boolean {
+  const normalizedRequesterId =
+    clean(requesterId);
+
+  return (
+    normalizedRequesterId.length > 0 &&
+    normalizedRequesterId ===
+      room.hostId
+  );
+}
+
+// ======================================================
+// GLOBAL CAMERA CONTROL
+// ======================================================
+
+/**
+ * Owner enables or disables camera
+ * access for the whole room.
+ */
+export function setRoomCameraEnabled(
+  room: Room,
+  requesterId: string,
+  enabled: boolean,
+): Room {
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return room;
+  }
+
+  return {
+    ...room,
+
+    controls: {
+      ...normalizeRoomControls(
+        room.controls,
+      ),
+
+      cameraEnabled:
+        enabled,
+    },
+  };
+}
+
+// ======================================================
+// GLOBAL MICROPHONE CONTROL
+// ======================================================
+
+/**
+ * Owner enables or disables microphone
+ * access for the whole room.
+ */
+export function setRoomMicrophoneEnabled(
+  room: Room,
+  requesterId: string,
+  enabled: boolean,
+): Room {
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return room;
+  }
+
+  return {
+    ...room,
+
+    controls: {
+      ...normalizeRoomControls(
+        room.controls,
+      ),
+
+      microphoneEnabled:
+        enabled,
+    },
+  };
+}
+
+// ======================================================
+// GLOBAL SCREEN SHARE CONTROL
+// ======================================================
+
+/**
+ * Owner enables or disables screen sharing
+ * for the whole room.
+ */
+export function setRoomScreenShareEnabled(
+  room: Room,
+  requesterId: string,
+  enabled: boolean,
+): Room {
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return room;
+  }
+
+  return {
+    ...room,
+
+    controls: {
+      ...normalizeRoomControls(
+        room.controls,
+      ),
+
+      screenShareEnabled:
+        enabled,
+    },
+  };
+}
+
+// ======================================================
+// INDIVIDUAL CAMERA CONTROL
+// ======================================================
+
+/**
+ * Owner can disable or enable camera
+ * for one specific participant.
+ */
+export function setParticipantCameraEnabled(
+  room: Room,
+  requesterId: string,
+  participantId: string,
+  enabled: boolean,
+): Room {
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return room;
+  }
+
+  const normalizedParticipantId =
+    clean(participantId);
+
+  if (
+    !normalizedParticipantId ||
+    !room.participantIds.includes(
+      normalizedParticipantId,
+    )
+  ) {
+    return room;
+  }
+
+  const controls =
+    normalizeRoomControls(
+      room.controls,
+    );
+
+  const disabled =
+    new Set(
+      controls.disabledCameraUserIds,
+    );
+
+  if (enabled) {
+    disabled.delete(
+      normalizedParticipantId,
+    );
+  } else {
+    disabled.add(
+      normalizedParticipantId,
+    );
+  }
+
+  return {
+    ...room,
+
+    controls: {
+      ...controls,
+
+      disabledCameraUserIds:
+        [...disabled],
+    },
+  };
+}
+
+// ======================================================
+// INDIVIDUAL MICROPHONE CONTROL
+// ======================================================
+
+/**
+ * Owner can disable or enable microphone
+ * for one specific participant.
+ */
+export function setParticipantMicrophoneEnabled(
+  room: Room,
+  requesterId: string,
+  participantId: string,
+  enabled: boolean,
+): Room {
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return room;
+  }
+
+  const normalizedParticipantId =
+    clean(participantId);
+
+  if (
+    !normalizedParticipantId ||
+    !room.participantIds.includes(
+      normalizedParticipantId,
+    )
+  ) {
+    return room;
+  }
+
+  const controls =
+    normalizeRoomControls(
+      room.controls,
+    );
+
+  const disabled =
+    new Set(
+      controls.disabledMicrophoneUserIds,
+    );
+
+  if (enabled) {
+    disabled.delete(
+      normalizedParticipantId,
+    );
+  } else {
+    disabled.add(
+      normalizedParticipantId,
+    );
+  }
+
+  return {
+    ...room,
+
+    controls: {
+      ...controls,
+
+      disabledMicrophoneUserIds:
+        [...disabled],
+    },
+  };
+}
+
+// ======================================================
+// INDIVIDUAL SCREEN SHARE CONTROL
+// ======================================================
+
+/**
+ * Owner can disable or enable screen sharing
+ * for one specific participant.
+ */
+export function setParticipantScreenShareEnabled(
+  room: Room,
+  requesterId: string,
+  participantId: string,
+  enabled: boolean,
+): Room {
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return room;
+  }
+
+  const normalizedParticipantId =
+    clean(participantId);
+
+  if (
+    !normalizedParticipantId ||
+    !room.participantIds.includes(
+      normalizedParticipantId,
+    )
+  ) {
+    return room;
+  }
+
+  const controls =
+    normalizeRoomControls(
+      room.controls,
+    );
+
+  const disabled =
+    new Set(
+      controls.disabledScreenShareUserIds,
+    );
+
+  if (enabled) {
+    disabled.delete(
+      normalizedParticipantId,
+    );
+  } else {
+    disabled.add(
+      normalizedParticipantId,
+    );
+  }
+
+  return {
+    ...room,
+
+    controls: {
+      ...controls,
+
+      disabledScreenShareUserIds:
+        [...disabled],
+    },
+  };
+}
+
+// ======================================================
+// CHECK CAMERA ACCESS
+// ======================================================
+
+/**
+ * Checks whether a participant currently
+ * has permission to use the camera.
+ */
+export function canUseRoomCamera(
+  room: Room,
+  userId: string,
+): boolean {
+  const normalizedUserId =
+    clean(userId);
+
+  if (!normalizedUserId) {
+    return false;
+  }
+
+  if (
+    !room.controls.cameraEnabled
+  ) {
+    return false;
+  }
+
+  if (
+    room.controls
+      .disabledCameraUserIds
+      .includes(
+        normalizedUserId,
+      )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+// ======================================================
+// CHECK MICROPHONE ACCESS
+// ======================================================
+
+/**
+ * Checks whether a participant currently
+ * has permission to use the microphone.
+ */
+export function canUseRoomMicrophone(
+  room: Room,
+  userId: string,
+): boolean {
+  const normalizedUserId =
+    clean(userId);
+
+  if (!normalizedUserId) {
+    return false;
+  }
+
+  if (
+    !room.controls
+      .microphoneEnabled
+  ) {
+    return false;
+  }
+
+  if (
+    room.controls
+      .disabledMicrophoneUserIds
+      .includes(
+        normalizedUserId,
+      )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+// ======================================================
+// CHECK SCREEN SHARE ACCESS
+// ======================================================
+
+/**
+ * Checks whether a participant currently
+ * has permission to share their screen.
+ */
+export function canUseRoomScreenShare(
+  room: Room,
+  userId: string,
+): boolean {
+  const normalizedUserId =
+    clean(userId);
+
+  if (!normalizedUserId) {
+    return false;
+  }
+
+  if (
+    !room.controls
+      .screenShareEnabled
+  ) {
+    return false;
+  }
+
+  if (
+    room.controls
+      .disabledScreenShareUserIds
+      .includes(
+        normalizedUserId,
+      )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+// ======================================================
+// GET ACTIVE ROOMS
+// ======================================================
+
 export function getActiveRooms(
   rooms: Room[],
 ): Room[] {
@@ -357,6 +925,10 @@ export function getActiveRooms(
     );
 }
 
+// ======================================================
+// GET ROOMS BY LEVEL
+// ======================================================
+
 export function getRoomsByLevel(
   rooms: Room[],
   level: Level,
@@ -368,6 +940,10 @@ export function getRoomsByLevel(
       room.level === level,
   );
 }
+
+// ======================================================
+// GET ROOMS BY LANGUAGE
+// ======================================================
 
 export function getRoomsByLanguage(
   rooms: Room[],
@@ -386,6 +962,10 @@ export function getRoomsByLanguage(
   );
 }
 
+// ======================================================
+// GET ROOMS BY HOST
+// ======================================================
+
 export function getRoomsByHost(
   rooms: Room[],
   hostId: string,
@@ -400,11 +980,19 @@ export function getRoomsByHost(
   );
 }
 
+// ======================================================
+// PARTICIPANT COUNT
+// ======================================================
+
 export function getRoomParticipantCount(
   room: Room,
 ): number {
   return room.participantIds.length;
 }
+
+// ======================================================
+// VALIDATE ROOM INPUT
+// ======================================================
 
 export function validateRoomInput(
   input: RoomInput,
@@ -455,6 +1043,8 @@ export function validateRoomInput(
 
 
     
-  
-        
+    
+    
+ 
 
+  
