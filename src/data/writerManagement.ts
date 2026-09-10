@@ -1,5 +1,4 @@
 import {
-  DRE2LEARN_OWNER_ID,
   createWriterAccount,
   hasPermission,
   type Account,
@@ -19,22 +18,12 @@ export interface WriterManagementResult {
   message: string;
 }
 
-export function canManageWriters(
-  account: Account,
-): boolean {
-  return hasPermission(
-    account,
-    "manageWriters",
-  );
+export function canManageWriters(account: Account): boolean {
+  return hasPermission(account, "manageWriters");
 }
 
-export function canManageArticles(
-  account: Account,
-): boolean {
-  return hasPermission(
-    account,
-    "manageArticles",
-  );
+export function canManageArticles(account: Account): boolean {
+  return hasPermission(account, "manageArticles");
 }
 
 export function approveWriterAndCreateAccount(
@@ -44,14 +33,18 @@ export function approveWriterAndCreateAccount(
   if (!canManageWriters(reviewer)) {
     return {
       success: false,
-      message:
-        "You do not have permission to manage writers.",
+      message: "You do not have permission to manage writers.",
     };
   }
 
-  const approved = approveWriterApplication(
-    application,
-  );
+  if (application.status !== "pending") {
+    return {
+      success: false,
+      message: "Only pending writer applications can be approved.",
+    };
+  }
+
+  const approved = approveWriterApplication(application);
 
   const account = createWriterAccount(
     application.userId,
@@ -66,25 +59,32 @@ export function approveWriterAndCreateAccount(
     success: true,
     application: approved,
     account,
-    message:
-      "Writer application approved and writer account created.",
+    message: "Writer application approved and writer account created.",
   };
 }
 
-export function rejectWriterApplicationForReview(
+export function rejectWriter(
   application: WriterApplication,
   reviewer: Account,
+  reviewerNote: string,
 ): WriterManagementResult {
   if (!canManageWriters(reviewer)) {
     return {
       success: false,
-      message:
-        "You do not have permission to manage writers.",
+      message: "You do not have permission to manage writers.",
+    };
+  }
+
+  if (application.status !== "pending") {
+    return {
+      success: false,
+      message: "Only pending writer applications can be rejected.",
     };
   }
 
   const rejected = rejectWriterApplication(
     application,
+    reviewerNote,
   );
 
   return {
@@ -95,17 +95,14 @@ export function rejectWriterApplicationForReview(
 }
 
 export function canEditWriterArticle(
-  account: Account,
   article: WriterArticle,
+  account: Account,
 ): boolean {
-  if (account.id === DRE2LEARN_OWNER_ID) {
+  if (account.id === "dre2learn-owner") {
     return true;
   }
 
-  if (
-    account.id === article.writerId &&
-    account.role === "writer"
-  ) {
+  if (article.writerId === account.id) {
     return true;
   }
 
@@ -121,53 +118,80 @@ export function canReviewWriterArticle(
 export function canPublishWriterArticle(
   account: Account,
 ): boolean {
-  return hasPermission(
-    account,
-    "manageArticles",
-  );
+  return canManageArticles(account);
 }
 
 export function canDeleteWriterArticle(
-  account: Account,
   article: WriterArticle,
+  account: Account,
 ): boolean {
-  return (
-    account.id === DRE2LEARN_OWNER_ID ||
-    account.id === article.writerId ||
-    canManageArticles(account)
-  );
+  if (account.id === "dre2learn-owner") {
+    return true;
+  }
+
+  if (article.writerId === account.id) {
+    return true;
+  }
+
+  return canManageArticles(account);
 }
 
 export function getWriterManagementSummary(
   applications: WriterApplication[],
   articles: WriterArticle[],
-) {
+): {
+  totalApplications: number;
+  pendingApplications: number;
+  approvedWriters: number;
+  rejectedApplications: number;
+  totalArticles: number;
+  submittedArticles: number;
+  underReviewArticles: number;
+  approvedArticles: number;
+  publishedArticles: number;
+  rejectedArticles: number;
+} {
+  const approvedWriters = applications.filter(
+    (application) => application.status === "approved",
+  ).length;
+
   return {
     totalApplications: applications.length,
+
     pendingApplications: applications.filter(
-      (application) =>
-        application.status === "pending",
+      (application) => application.status === "pending",
     ).length,
-    approvedApplications: applications.filter(
-      (application) =>
-        application.status === "approved",
-    ).length,
+
+    approvedWriters,
+
     rejectedApplications: applications.filter(
-      (application) =>
-        application.status === "rejected",
+      (application) => application.status === "rejected",
     ).length,
+
     totalArticles: articles.length,
-    drafts: articles.filter(
-      (article) => article.status === "draft",
-    ).length,
-    submitted: articles.filter(
+
+    submittedArticles: articles.filter(
       (article) => article.status === "submitted",
     ).length,
-    underReview: articles.filter(
+
+    underReviewArticles: articles.filter(
       (article) => article.status === "under-review",
     ).length,
-    published: articles.filter(
+
+    approvedArticles: articles.filter(
+      (article) => article.status === "approved",
+    ).length,
+
+    publishedArticles: articles.filter(
       (article) => article.status === "published",
+    ).length,
+
+    rejectedArticles: articles.filter(
+      (article) => article.status === "rejected",
     ).length,
   };
 }
+  
+
+
+    
