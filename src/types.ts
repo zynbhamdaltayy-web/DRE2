@@ -1,3 +1,7 @@
+// ======================================================
+// PAGES
+// ======================================================
+
 export type Page =
   | "welcome"
   | "auth"
@@ -129,9 +133,7 @@ export interface VocabularyWord {
   word: string;
   meaning: string;
   example: string;
-
   articleId: string;
-
   savedAt: string;
 }
 
@@ -142,13 +144,9 @@ export interface VocabularyWord {
 export interface PracticeQuestion {
   id: string;
   level: Level;
-
   question: string;
-
   options: string[];
-
   correctAnswer: string;
-
   explanation: string;
 }
 
@@ -168,25 +166,15 @@ export type LevelTestQuestionType =
 
 export interface LevelTestQuestion {
   id: string;
-
   level: Level;
-
   skill: LevelTestSkill;
-
   type: LevelTestQuestionType;
-
   question: string;
-
   passage?: string;
-
   audioSrc?: string;
-
   options?: string[];
-
   correctAnswer?: string;
-
   writingPrompt?: string;
-
   points: number;
 }
 
@@ -196,11 +184,8 @@ export interface LevelTestQuestion {
 
 export interface LevelTestAnswer {
   questionId: string;
-
   answer: string;
-
   isCorrect?: boolean;
-
   pointsEarned?: number;
 }
 
@@ -210,31 +195,21 @@ export interface LevelTestAnswer {
 
 export interface LevelTestSkillResult {
   skill: LevelTestSkill;
-
   score: number;
-
   total: number;
-
   percentage: number;
-
   level: Level;
 }
 
 export interface LevelTestResult {
   score: number;
-
   total: number;
-
   percentage: number;
-
   level: Level;
 
   reading: LevelTestSkillResult;
-
   listening: LevelTestSkillResult;
-
   writing: LevelTestSkillResult;
-
   grammar: LevelTestSkillResult;
 
   completedAt: string;
@@ -260,7 +235,7 @@ export interface XpReward {
 }
 
 // ======================================================
-// CARDS GAME
+// CARDS
 // ======================================================
 
 export type CardDifficulty =
@@ -268,32 +243,54 @@ export type CardDifficulty =
   | "medium"
   | "hard";
 
+export type LearningCardType =
+  | "word"
+  | "phrase"
+  | "question"
+  | "challenge"
+  | "roleplay";
+
+/*
+ * Supports the original card structure and
+ * the newer card system.
+ */
 export interface LearningCard {
   id: string;
 
-  word: string;
+  title?: string;
+  content?: string;
+  answer?: string;
 
-  meaning: string;
+  word?: string;
+  meaning?: string;
+  example?: string;
 
-  example: string;
+  type?: LearningCardType;
 
   level: Level;
-
   topic: string;
 
-  difficulty: CardDifficulty;
+  difficulty?: CardDifficulty;
 
   xpCost: number;
+  xpReward?: number;
 
-  xpReward: number;
+  createdAt?: string;
 }
 
 export interface CollectedCard {
   cardId: string;
-
   collectedAt: string;
 
-  timesPlayed: number;
+  /*
+   * New system.
+   */
+  timesUsed?: number;
+
+  /*
+   * Original system compatibility.
+   */
+  timesPlayed?: number;
 }
 
 // ======================================================
@@ -311,32 +308,51 @@ export type RoomType =
 
 export interface RoomSettings {
   topic: string;
-
   level: Level;
-
   gender: RoomGender;
-
   type: RoomType;
-
   maxParticipants: number;
 
+  /*
+   * Private messaging inside rooms
+   * remains a separate safety setting.
+   */
   allowPrivateMessages: boolean;
 }
 
 export interface LearningRoom {
   id: string;
-
   name: string;
-
   hostId: string;
-
   settings: RoomSettings;
-
   participants: string[];
-
   createdAt: string;
-
   isActive: boolean;
+}
+
+/*
+ * Room structure used by src/data/rooms.ts.
+ */
+export type RoomStatus =
+  | "waiting"
+  | "active"
+  | "ended";
+
+export interface Room {
+  id: string;
+  title: string;
+  language: string;
+  level: Level;
+  topic: string;
+  type: RoomType;
+  gender: RoomGender;
+  hostId: string;
+  participantIds: string[];
+  maxParticipants: number;
+  status: RoomStatus;
+  createdAt: string;
+  startedAt?: string;
+  endedAt?: string;
 }
 
 // ======================================================
@@ -345,9 +361,7 @@ export interface LearningRoom {
 
 export interface IdentityCard {
   issuedAt: string;
-
   expiresAt: string;
-
   renewalXpCost?: number;
 }
 
@@ -357,7 +371,6 @@ export interface IdentityCard {
 
 export interface UserProfile {
   name: string;
-
   email: string;
 
   // ISO 3166-1 alpha-2 country code.
@@ -365,9 +378,7 @@ export interface UserProfile {
   countryCode: string;
 
   level: Level;
-
   avatar: Avatar;
-
   xp: number;
 
   identityCard: IdentityCard | null;
@@ -381,20 +392,71 @@ export interface UserProfile {
 // SETTINGS
 // ======================================================
 
-export interface AppSettings {
-  notifications: boolean;
+export type ThemeMode =
+  | "light"
+  | "dark"
+  | "system";
 
-  soundEffects: boolean;
+export type AppLanguage =
+  | "ar"
+  | "en"
+  | "zh-CN"
+  | "ru"
+  | "ku"
+  | "tr"
+  | "fr"
+  | "de"
+  | "es"
+  | "it"
+  | "ja"
+  | "ko";
 
-  autoplayAudio: boolean;
+export interface NotificationSettings {
+  pushNotifications: boolean;
+  messageNotifications: boolean;
+  followNotifications: boolean;
+  learningNotifications: boolean;
+  officialUpdates: boolean;
+}
 
-  privateMessages: boolean;
-
+export interface PrivacySettings {
+  profileVisible: boolean;
   showOnlineStatus: boolean;
+  allowMessageRequests: boolean;
+  allowRoomInvites: boolean;
+}
 
-  preferredTheme: "light" | "system" | "dark";
+export interface LearningSettings {
+  dailyGoal: number;
+  defaultLevel: string;
+  defaultLanguage: string;
+  autoplayAudio: boolean;
+}
 
-  preferredLanguage: "en" | "ar";
+export interface AppSettings {
+  /*
+   * New settings structure.
+   */
+  theme: ThemeMode;
+  language: AppLanguage;
+
+  notifications: NotificationSettings;
+  privacy: PrivacySettings;
+  learning: LearningSettings;
+
+  /*
+   * Legacy compatibility fields.
+   */
+  notificationsEnabled?: boolean;
+  soundEffects?: boolean;
+  autoplayAudio?: boolean;
+  privateMessages?: boolean;
+  showOnlineStatus?: boolean;
+  preferredTheme?:
+    | "light"
+    | "system"
+    | "dark";
+  preferredLanguage?: "en" | "ar";
 }
 
 // ======================================================
@@ -404,23 +466,62 @@ export interface AppSettings {
 export type UpdateType =
   | "feature"
   | "improvement"
-  | "fix"
-  | "announcement";
+  | "maintenance"
+  | "announcement"
+  | "security"
+  | "education"
+  | "fix";
 
+export type UpdateStatus =
+  | "draft"
+  | "published"
+  | "archived";
+
+/*
+ * New update structure.
+ */
 export interface AppUpdate {
   id: string;
 
   title: string;
 
-  description: string;
+  /*
+   * New system.
+   */
+  message?: string;
+
+  /*
+   * Legacy compatibility.
+   */
+  description?: string;
 
   type: UpdateType;
 
-  version: string;
+  status?: UpdateStatus;
 
-  date: string;
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string;
 
-  isNew: boolean;
+  /*
+   * Legacy field.
+   */
+  date?: string;
+
+  authorId?: string;
+
+  featured?: boolean;
+
+  version?: string;
+
+  actionUrl?: string;
+
+  metadata?: Record<string, string>;
+
+  /*
+   * Legacy UI compatibility.
+   */
+  isNew?: boolean;
 }
 
 // ======================================================
@@ -443,6 +544,26 @@ export interface ProgressStats {
   levelTestScore: number;
 
   levelTestTotal: number;
+
+  // ----------------------------------------------------
+  // Streak
+  // ----------------------------------------------------
+
+  currentStreak?: number;
+
+  longestStreak?: number;
+
+  lastActiveDate?: string;
+
+  streakActive?: boolean;
+
+  // ----------------------------------------------------
+  // Daily progress
+  // ----------------------------------------------------
+
+  dailyXp?: number;
+
+  dailyGoal?: number;
 }
 
 // ======================================================
@@ -527,6 +648,39 @@ export interface AppState {
   // ----------------------------------------------------
 
   seenUpdates?: string[];
+
+  // ----------------------------------------------------
+  // Streak / Daily Progress
+  // ----------------------------------------------------
+
+  progress?: {
+    currentStreak: number;
+
+    longestStreak: number;
+
+    lastActiveDate: string;
+
+    dailyXp?: number;
+
+    dailyGoal?: number;
+  };
 }
+  
 
 
+
+  
+
+  
+
+  
+
+
+  
+  
+
+
+  
+
+  
+  
