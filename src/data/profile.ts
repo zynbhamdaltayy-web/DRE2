@@ -12,6 +12,9 @@ export interface UserProfileData {
   level: Level;
   xp: number;
   avatar: Avatar | null;
+  isVip: boolean;
+  vipSince?: string;
+  vipUntil?: string;
   joinedAt: string;
   updatedAt: string;
 }
@@ -37,26 +40,55 @@ function cleanString(
 export function createProfile(
   input: Omit<
     UserProfileData,
-    "joinedAt" | "updatedAt"
-  >,
+    | "joinedAt"
+    | "updatedAt"
+    | "isVip"
+    | "vipSince"
+    | "vipUntil"
+  > & {
+    isVip?: boolean;
+    vipSince?: string;
+    vipUntil?: string;
+  },
 ): UserProfileData {
   const timestamp =
     new Date().toISOString();
 
   return {
     ...input,
+
     id: cleanString(input.id),
+
     username: cleanString(
       input.username,
     ),
+
     displayName: cleanString(
       input.displayName,
     ),
+
     bio: cleanString(input.bio),
+
     countryCode: cleanString(
       input.countryCode,
     ).toUpperCase(),
+
     xp: Math.max(0, input.xp),
+
+    avatar: input.avatar ?? null,
+
+    isVip: input.isVip === true,
+
+    vipSince:
+      input.vipSince
+        ? cleanString(input.vipSince)
+        : undefined,
+
+    vipUntil:
+      input.vipUntil
+        ? cleanString(input.vipUntil)
+        : undefined,
+
     joinedAt: timestamp,
     updatedAt: timestamp,
   };
@@ -67,24 +99,46 @@ export function normalizeProfile(
 ): UserProfileData {
   return {
     ...profile,
+
     id: cleanString(profile.id),
+
     username:
       cleanString(profile.username) ||
       "User",
+
     displayName:
       cleanString(
         profile.displayName,
       ) ||
       cleanString(profile.username) ||
       "User",
+
     bio: cleanString(profile.bio),
+
     countryCode: cleanString(
       profile.countryCode,
     ).toUpperCase(),
+
     xp: Math.max(0, profile.xp ?? 0),
+
+    avatar: profile.avatar ?? null,
+
+    isVip: profile.isVip === true,
+
+    vipSince:
+      profile.vipSince
+        ? cleanString(profile.vipSince)
+        : undefined,
+
+    vipUntil:
+      profile.vipUntil
+        ? cleanString(profile.vipUntil)
+        : undefined,
+
     joinedAt:
       cleanString(profile.joinedAt) ||
       new Date().toISOString(),
+
     updatedAt:
       cleanString(profile.updatedAt) ||
       new Date().toISOString(),
@@ -136,6 +190,18 @@ export function updateProfile(
         ? changes.avatar
         : profile.avatar,
 
+    isVip: profile.isVip === true,
+
+    vipSince:
+      profile.vipSince
+        ? cleanString(profile.vipSince)
+        : undefined,
+
+    vipUntil:
+      profile.vipUntil
+        ? cleanString(profile.vipUntil)
+        : undefined,
+
     updatedAt:
       new Date().toISOString(),
   };
@@ -171,11 +237,15 @@ export function validateProfile(
   const errors: string[] = [];
 
   if (!profile.id.trim()) {
-    errors.push("Profile ID is required.");
+    errors.push(
+      "Profile ID is required.",
+    );
   }
 
   if (!profile.username.trim()) {
-    errors.push("Username is required.");
+    errors.push(
+      "Username is required.",
+    );
   }
 
   if (
@@ -209,8 +279,9 @@ export function validateProfile(
 
   return errors;
 }
-  
-    
-    
     
       
+      
+
+  
+  
