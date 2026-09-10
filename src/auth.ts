@@ -8,7 +8,6 @@ import { auth, googleProvider } from "./firebase";
 
 import {
   createOwnerAccount,
-  createUserAccount,
   DRE2LEARN_OWNER_ID,
   DRE2LEARN_USERNAME,
   type Account,
@@ -49,7 +48,7 @@ export async function signInWithGoogle(): Promise<{
       .toLowerCase() ?? "";
 
   /*
-   * The official DRE2learn Owner account.
+   * Official DRE2learn Owner account.
    */
   if (isDRE2learnOwnerEmail(email)) {
     const owner = createOwnerAccount(
@@ -67,37 +66,22 @@ export async function signInWithGoogle(): Promise<{
   }
 
   /*
-   * Normal Google user.
+   * Normal Google account.
+   *
+   * createOrRestoreGoogleAccount()
+   * handles both first-time creation
+   * and restoring an existing account.
    */
-  const username =
-    firebaseUser.displayName?.trim() ||
-    email.split("@")[0] ||
-    "User";
-
-  const user = createUserAccount(
-    firebaseUser.uid,
-    username,
-    email,
-    "",
-    null,
-  );
-
-  setCurrentAccount(user);
-
-  /*
-   * Keep account storage synchronized
-   * with the Google account.
-   */
-  const restored =
+  const account =
     createOrRestoreGoogleAccount(
       firebaseUser,
     );
 
-  setCurrentAccount(restored);
+  setCurrentAccount(account);
 
   return {
     firebaseUser,
-    account: restored,
+    account,
   };
 }
 
@@ -123,5 +107,6 @@ export {
   DRE2LEARN_OWNER_ID,
   DRE2LEARN_USERNAME,
 };
-  
+
+      
     
