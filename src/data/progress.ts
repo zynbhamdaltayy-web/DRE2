@@ -4,7 +4,11 @@ import type {
   ProgressStats,
 } from "../types";
 
-const LEVEL_ORDER: Level[] = [
+/* =========================================================
+   LEVEL SYSTEM
+========================================================= */
+
+export const LEVEL_ORDER: Level[] = [
   "A1",
   "A2",
   "B1",
@@ -13,7 +17,7 @@ const LEVEL_ORDER: Level[] = [
   "C2",
 ];
 
-const LEVEL_PERCENTAGES: Record<Level, number> = {
+export const LEVEL_PERCENTAGES: Record<Level, number> = {
   A1: 0,
   A2: 20,
   B1: 40,
@@ -22,7 +26,7 @@ const LEVEL_PERCENTAGES: Record<Level, number> = {
   C2: 100,
 };
 
-const LEVEL_THRESHOLDS: Record<Level, number> = {
+export const LEVEL_THRESHOLDS: Record<Level, number> = {
   A1: 0,
   A2: 100,
   B1: 300,
@@ -31,314 +35,317 @@ const LEVEL_THRESHOLDS: Record<Level, number> = {
   C2: 2500,
 };
 
-const DAILY_GOAL_DEFAULT = 20;
+export const DAILY_GOAL_DEFAULT = 20;
 
-/* -------------------------------------------------------
-   Basic helpers
-------------------------------------------------------- */
+/* =========================================================
+   NORMALIZATION HELPERS
+========================================================= */
 
-export function normalizeProgressNumber(
-  value: number | undefined | null,
-): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value)
-  ) {
+function normalizeProgressNumber(value: unknown): number {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) {
     return 0;
   }
 
-  return Math.max(0, Math.floor(value));
+  return Math.max(0, numberValue);
 }
 
-function normalizeDate(
-  value: string | undefined | null,
-): string {
-  if (
-    typeof value !== "string" ||
-    !value
-  ) {
+function normalizeDate(value: unknown): string {
+  if (typeof value !== "string") {
     return "";
   }
 
-  return value.slice(0, 10);
+  return value.trim();
 }
 
-function getTodayDate(): string {
-  return new Date()
-    .toISOString()
-    .slice(0, 10);
+export function getTodayDate(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function getDateDifferenceInDays(
-  olderDate: string,
-  newerDate: string,
+  fromDate: string,
+  toDate: string,
 ): number {
-  const older = new Date(
-    `${olderDate}T00:00:00`,
-  );
+  if (!fromDate || !toDate) {
+    return Infinity;
+  }
 
-  const newer = new Date(
-    `${newerDate}T00:00:00`,
-  );
+  const from = new Date(`${fromDate}T00:00:00`);
+  const to = new Date(`${toDate}T00:00:00`);
 
   if (
-    Number.isNaN(older.getTime()) ||
-    Number.isNaN(newer.getTime())
+    Number.isNaN(from.getTime()) ||
+    Number.isNaN(to.getTime())
   ) {
     return Infinity;
   }
 
   const difference =
-    newer.getTime() -
-    older.getTime();
+    to.getTime() - from.getTime();
 
-  return Math.round(
-    difference /
-      (1000 * 60 * 60 * 24),
+  return Math.floor(
+    difference / (1000 * 60 * 60 * 24),
   );
 }
 
-/* -------------------------------------------------------
-   Level Test
-------------------------------------------------------- */
+/* =========================================================
+   LEVEL HELPERS
+========================================================= */
+
+export function getLevelFromXp(totalXp: number): Level {
+  const xp = normalizeProgressNumber(totalXp);
+
+  let currentLevel: Level = "A1";
+
+  for (const level of LEVEL_ORDER) {
+    if (xp >= LEVEL_THRESHOLDS[level]) {
+      currentLevel = level;
+    } else {
+      break;
+    }
+  }
+
+  return currentLevel;
+}
+
+export function getNextLevel(
+  level: Level,
+): Level | null {
+  const index = LEVEL_ORDER.indexOf(level);
+
+  if (index === -1 || index >= LEVEL_ORDER.length - 1) {
+    return null;
+  }
+
+  return LEVEL_ORDER[index + 1];
+}
+
+export function getXpToNextLevel(
+  totalXp: number,
+): number {
+  const xp = normalizeProgressNumber(totalXp);
+  const currentLevel = getLevelFromXp(xp);
+  const nextLevel = getNextLevel(currentLevel);
+
+  if (!nextLevel) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    LEVEL_THRESHOLDS[nextLevel] - xp,
+  );
+}
+
+export function getLevelProgress(
+  totalXp: number,
+): number {
+  const xp = normalizeProgressNumber(totalXp);
+  const currentLevel = getLevelFromXp(xp);
+  const nextLevel = getNextLevel(currentLevel);
+
+  if (!nextLevel) {
+    return 100;
+  }
+
+  const currentThreshold =
+    LEVEL_THRESHOLDS[currentLevel];
+
+  const nextThreshold =
+    LEVEL_THRESHOLDS[nextLevel];
+
+  const range =
+    nextThreshold - currentThreshold;
+
+  if (range <= 0) {
+    return 100;
+  }
+
+  const progress =
+    ((xp - currentThreshold) / range) * 100;
+
+  return Math.min(
+    100,
+    Math.max(0, Math.round(progress)),
+  );
+}
+
+/* =========================================================
+   LEVEL TEST
+========================================================= */
 
 export function getLevelTestPercentage(
   score: number,
   total: number,
 ): number {
-  const safeScore =
+  const normalizedScore =
     normalizeProgressNumber(score);
 
-  const safeTotal =
+  const normalizedTotal =
     normalizeProgressNumber(total);
 
-  if (safeTotal <= 0) {
+  if (normalizedTotal <= 0) {
     return 0;
   }
 
   return Math.min(
     100,
-    Math.round(
-      (safeScore / safeTotal) * 100,
+    Math.max(
+      0,
+      Math.round(
+        (normalizedScore / normalizedTotal) * 100,
+      ),
     ),
   );
 }
 
-/* -------------------------------------------------------
-   Learning activities
-------------------------------------------------------- */
-
-export function getLearningActivitySummary(
+export function isLevelTestCompleted(
   state: AppState,
-) {
-  const articlesRead =
-    normalizeProgressNumber(
-      state.articlesRead,
-    );
-
-  const vocabularyLearned =
-    normalizeProgressNumber(
-      state.vocabularyLearned,
-    );
-
-  const practiceCompleted =
-    normalizeProgressNumber(
-      state.practiceCompleted,
-    );
-
-  const roomsJoined =
-    normalizeProgressNumber(
-      state.roomsJoined,
-    );
-
-  const cardsCollected =
-    normalizeProgressNumber(
-      state.cardsCollected,
-    );
-
-  return {
-    articlesRead,
-    vocabularyLearned,
-    practiceCompleted,
-    roomsJoined,
-    cardsCollected,
-  };
-}
-
-/* -------------------------------------------------------
-   XP progress
-------------------------------------------------------- */
-
-export function getLevelThreshold(
-  level: Level,
-): number {
-  return LEVEL_THRESHOLDS[level];
-}
-
-export function getXpProgressSummary(
-  state: AppState,
-) {
-  const xp =
-    normalizeProgressNumber(
-      state.totalXp,
-    );
-
-  const level =
-    state.user?.level ?? "A1";
-
-  const currentIndex =
-    LEVEL_ORDER.indexOf(level);
-
-  const currentLevel =
-    currentIndex >= 0
-      ? LEVEL_ORDER[currentIndex]
-      : "A1";
-
-  const nextLevel =
-    currentIndex >= 0 &&
-    currentIndex <
-      LEVEL_ORDER.length - 1
-      ? LEVEL_ORDER[
-          currentIndex + 1
-        ]
-      : null;
-
-  const currentThreshold =
-    getLevelThreshold(
-      currentLevel,
-    );
-
-  const nextThreshold =
-    nextLevel !== null
-      ? getLevelThreshold(
-          nextLevel,
-        )
-      : currentThreshold;
-
-  const range =
-    nextThreshold -
-    currentThreshold;
-
-  const progress =
-    nextLevel === null
-      ? 100
-      : range <= 0
-        ? 0
-        : Math.min(
-            100,
-            Math.max(
-              0,
-              Math.round(
-                ((xp -
-                  currentThreshold) /
-                  range) *
-                  100,
-              ),
-            ),
-          );
-
-  return {
-    xp,
-    level: currentLevel,
-    currentThreshold,
-    nextLevel,
-    nextThreshold,
-    progress,
-
-    xpToNextLevel:
-      nextLevel === null
-        ? 0
-        : Math.max(
-            0,
-            nextThreshold - xp,
-          ),
-  };
-}
-
-/* -------------------------------------------------------
-   Activity completion
-------------------------------------------------------- */
-
-export function getActivityCompletionScore(
-  state: AppState,
-): number {
-  const activity =
-    getLearningActivitySummary(
-      state,
-    );
-
-  const targets = {
-    articles: 10,
-    vocabulary: 50,
-    practice: 10,
-    rooms: 5,
-    cards: 20,
-  };
-
-  const articleScore =
-    Math.min(
-      100,
-      (activity.articlesRead /
-        targets.articles) *
-        100,
-    );
-
-  const vocabularyScore =
-    Math.min(
-      100,
-      (activity.vocabularyLearned /
-        targets.vocabulary) *
-        100,
-    );
-
-  const practiceScore =
-    Math.min(
-      100,
-      (activity.practiceCompleted /
-        targets.practice) *
-        100,
-    );
-
-  const roomScore =
-    Math.min(
-      100,
-      (activity.roomsJoined /
-        targets.rooms) *
-        100,
-    );
-
-  const cardScore =
-    Math.min(
-      100,
-      (activity.cardsCollected /
-        targets.cards) *
-        100,
-    );
-
-  return Math.round(
-    (
-      articleScore +
-      vocabularyScore +
-      practiceScore +
-      roomScore +
-      cardScore
-    ) / 5,
+): boolean {
+  return (
+    normalizeProgressNumber(state.levelTestTotal) > 0
   );
 }
 
-/* -------------------------------------------------------
-   LEVEL progress
-------------------------------------------------------- */
+/* =========================================================
+   ACTIVITY PROGRESS
+========================================================= */
 
-export function getLevelProgressPercentage(
-  level: Level,
-): number {
-  return LEVEL_PERCENTAGES[level];
+export interface ActivityProgress {
+  articles: number;
+  vocabulary: number;
+  practice: number;
+  rooms: number;
+  cards: number;
+  total: number;
 }
 
-/* -------------------------------------------------------
-   STREAK SYSTEM
-------------------------------------------------------- */
+const ACTIVITY_TARGETS = {
+  articles: 10,
+  vocabulary: 50,
+  practice: 10,
+  rooms: 5,
+  cards: 20,
+} as const;
+
+function getActivityPercentage(
+  current: number,
+  target: number,
+): number {
+  if (target <= 0) {
+    return 100;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round((current / target) * 100),
+    ),
+  );
+}
+
+export function getActivityProgress(
+  state: AppState,
+): ActivityProgress {
+  const articles =
+    normalizeProgressNumber(state.articlesRead);
+
+  const vocabulary =
+    normalizeProgressNumber(state.vocabularyLearned);
+
+  const practice =
+    normalizeProgressNumber(state.practiceCompleted);
+
+  const rooms =
+    normalizeProgressNumber(state.roomsJoined);
+
+  const cards =
+    normalizeProgressNumber(state.cardsCollected);
+
+  const percentages = [
+    getActivityPercentage(
+      articles,
+      ACTIVITY_TARGETS.articles,
+    ),
+    getActivityPercentage(
+      vocabulary,
+      ACTIVITY_TARGETS.vocabulary,
+    ),
+    getActivityPercentage(
+      practice,
+      ACTIVITY_TARGETS.practice,
+    ),
+    getActivityPercentage(
+      rooms,
+      ACTIVITY_TARGETS.rooms,
+    ),
+    getActivityPercentage(
+      cards,
+      ACTIVITY_TARGETS.cards,
+    ),
+  ];
+
+  const total = Math.round(
+    percentages.reduce(
+      (sum, value) => sum + value,
+      0,
+    ) / percentages.length,
+  );
+
+  return {
+    articles,
+    vocabulary,
+    practice,
+    rooms,
+    cards,
+    total,
+  };
+}
+
+/* =========================================================
+   XP PROGRESS
+========================================================= */
+
+export interface XpProgress {
+  currentXp: number;
+  currentLevel: Level;
+  nextLevel: Level | null;
+  xpToNextLevel: number;
+  levelProgress: number;
+}
+
+export function getXpProgress(
+  totalXp: number,
+): XpProgress {
+  const currentXp =
+    normalizeProgressNumber(totalXp);
+
+  const currentLevel =
+    getLevelFromXp(currentXp);
+
+  const nextLevel =
+    getNextLevel(currentLevel);
+
+  const xpToNextLevel =
+    getXpToNextLevel(currentXp);
+
+  const levelProgress =
+    getLevelProgress(currentXp);
+
+  return {
+    currentXp,
+    currentLevel,
+    nextLevel,
+    xpToNextLevel,
+    levelProgress,
+  };
+}
+
+/* =========================================================
+   STREAK
+========================================================= */
 
 export interface StreakData {
   currentStreak: number;
@@ -346,210 +353,103 @@ export interface StreakData {
   lastActiveDate: string;
 }
 
-/*
-  Reads streak information safely.
-
-  The current AppState may have been created before
-  streak support was added, so we intentionally use
-  backward-compatible defaults.
-*/
-function getStoredStreakData(
+export function getStoredStreakData(
   state: AppState,
 ): StreakData {
-  const progress =
-    state.progress as
-      | Record<string, unknown>
-      | undefined;
+  return {
+    currentStreak: normalizeProgressNumber(
+      state.progress?.currentStreak,
+    ),
+    longestStreak: normalizeProgressNumber(
+      state.progress?.longestStreak,
+    ),
+    lastActiveDate: normalizeDate(
+      state.progress?.lastActiveDate,
+    ),
+  };
+}
 
+export function calculateCurrentStreak(
+  previousStreak: StreakData,
+  today: string = getTodayDate(),
+): number {
   const currentStreak =
     normalizeProgressNumber(
-      progress?.currentStreak as
-        | number
-        | undefined,
-    );
-
-  const longestStreak =
-    normalizeProgressNumber(
-      progress?.longestStreak as
-        | number
-        | undefined,
+      previousStreak.currentStreak,
     );
 
   const lastActiveDate =
     normalizeDate(
-      progress?.lastActiveDate as
-        | string
-        | undefined,
+      previousStreak.lastActiveDate,
     );
 
-  return {
-    currentStreak,
-    longestStreak,
-    lastActiveDate,
-  };
-}
-
-/*
-  Calculates what the streak should be today.
-
-  Rules:
-  - No previous activity -> 1
-  - Activity today -> unchanged
-  - Activity yesterday -> +1
-  - More than one day gap -> reset to 1
-*/
-export function calculateCurrentStreak(
-  state: AppState,
-  today: string = getTodayDate(),
-): number {
-  const streak =
-    getStoredStreakData(state);
-
-  if (!streak.lastActiveDate) {
+  if (!lastActiveDate) {
     return 1;
   }
 
   const difference =
     getDateDifferenceInDays(
-      streak.lastActiveDate,
+      lastActiveDate,
       today,
     );
 
   if (difference === 0) {
-    return Math.max(
-      1,
-      streak.currentStreak,
-    );
+    return Math.max(1, currentStreak);
   }
 
   if (difference === 1) {
-    return (
-      Math.max(
-        1,
-        streak.currentStreak,
-      ) + 1
-    );
+    return currentStreak + 1;
   }
 
   return 1;
 }
 
-/*
-  Returns the complete streak status
-  without mutating AppState.
-*/
 export function getStreakSummary(
   state: AppState,
-  today: string = getTodayDate(),
-): StreakData {
-  const stored =
+): StreakData & {
+  active: boolean;
+} {
+  const streak =
     getStoredStreakData(state);
 
-  const calculated =
+  return {
+    ...streak,
+    active: isStreakActive(state),
+  };
+}
+
+export function updateStreak(
+  state: AppState,
+  activityDate: string = getTodayDate(),
+): StreakData {
+  const previous =
+    getStoredStreakData(state);
+
+  const today =
+    normalizeDate(activityDate) ||
+    getTodayDate();
+
+  const currentStreak =
     calculateCurrentStreak(
-      state,
+      previous,
       today,
     );
 
-  const isActiveToday =
-    stored.lastActiveDate ===
-    today;
-
-  const currentStreak =
-    isActiveToday
-      ? Math.max(
-          1,
-          stored.currentStreak,
-        )
-      : calculated;
-
   const longestStreak =
     Math.max(
-      stored.longestStreak,
+      previous.longestStreak,
       currentStreak,
     );
 
   return {
     currentStreak,
     longestStreak,
-    lastActiveDate:
-      stored.lastActiveDate,
-  };
-}
-
-/*
-  Returns the streak that should be saved
-  after the user performs learning activity today.
-*/
-export function updateStreak(
-  state: AppState,
-  today: string = getTodayDate(),
-): StreakData {
-  const stored =
-    getStoredStreakData(state);
-
-  if (
-    stored.lastActiveDate ===
-    today
-  ) {
-    return {
-      currentStreak:
-        Math.max(
-          1,
-          stored.currentStreak,
-        ),
-
-      longestStreak:
-        Math.max(
-          stored.longestStreak,
-          stored.currentStreak,
-        ),
-
-      lastActiveDate: today,
-    };
-  }
-
-  const difference =
-    stored.lastActiveDate
-      ? getDateDifferenceInDays(
-          stored.lastActiveDate,
-          today,
-        )
-      : Infinity;
-
-  const newCurrentStreak =
-    difference === 1
-      ? Math.max(
-          1,
-          stored.currentStreak,
-        ) + 1
-      : 1;
-
-  const newLongestStreak =
-    Math.max(
-      stored.longestStreak,
-      newCurrentStreak,
-    );
-
-  return {
-    currentStreak:
-      newCurrentStreak,
-
-    longestStreak:
-      newLongestStreak,
-
     lastActiveDate: today,
   };
 }
 
-/*
-  Convenience helper:
-  tells the UI whether the user is currently
-  maintaining an active streak.
-*/
 export function isStreakActive(
   state: AppState,
-  today: string = getTodayDate(),
 ): boolean {
   const streak =
     getStoredStreakData(state);
@@ -558,197 +458,228 @@ export function isStreakActive(
     return false;
   }
 
+  const today = getTodayDate();
+
   const difference =
     getDateDifferenceInDays(
       streak.lastActiveDate,
       today,
     );
 
-  return (
-    difference === 0 ||
-    difference === 1
-  );
+  return difference === 0 || difference === 1;
 }
 
-/* -------------------------------------------------------
-   Daily Goal
-------------------------------------------------------- */
+/* =========================================================
+   DAILY GOAL
+========================================================= */
 
 export function getDailyGoal(
   state: AppState,
-) {
-  const today =
-    getTodayDate();
-
-  const progress =
-    state.progress?.dailyXp ?? 0;
-
-  const goal =
-    state.progress?.dailyGoal ??
-    DAILY_GOAL_DEFAULT;
-
-  const lastActiveDate =
-    normalizeDate(
-      state.progress?.lastActiveDate,
+): number {
+  const configuredGoal =
+    normalizeProgressNumber(
+      state.progress?.dailyGoal,
     );
 
-  const currentProgress =
-    lastActiveDate === today
-      ? normalizeProgressNumber(
-          progress,
-        )
-      : 0;
+  if (configuredGoal > 0) {
+    return configuredGoal;
+  }
+
+  if (
+    state.settings?.learning?.dailyGoal &&
+    state.settings.learning.dailyGoal > 0
+  ) {
+    return normalizeProgressNumber(
+      state.settings.learning.dailyGoal,
+    );
+  }
+
+  return DAILY_GOAL_DEFAULT;
+}
+
+export interface DailyGoalProgress {
+  current: number;
+  goal: number;
+  percentage: number;
+  completed: boolean;
+}
+
+export function getDailyGoalProgress(
+  state: AppState,
+): DailyGoalProgress {
+  const current =
+    normalizeProgressNumber(
+      state.progress?.dailyXp,
+    );
+
+  const goal =
+    getDailyGoal(state);
+
+  const percentage =
+    goal <= 0
+      ? 100
+      : Math.min(
+          100,
+          Math.round((current / goal) * 100),
+        );
 
   return {
-    date: today,
-
-    progress: Math.min(
-      currentProgress,
-      goal,
-    ),
-
+    current,
     goal,
-
-    completed:
-      currentProgress >= goal,
-
-    percentage:
-      goal <= 0
-        ? 100
-        : Math.min(
-            100,
-            Math.round(
-              (currentProgress /
-                goal) *
-                100,
-            ),
-          ),
+    percentage,
+    completed: current >= goal,
   };
 }
 
-/* -------------------------------------------------------
-   Overall progress
-------------------------------------------------------- */
+/* =========================================================
+   OVERALL PROGRESS
+========================================================= */
 
 export function getOverallProgress(
   state: AppState,
 ): number {
+  const activityProgress =
+    getActivityProgress(state);
+
   const levelProgress =
-    getLevelProgressPercentage(
-      state.user?.level ?? "A1",
-    );
+    getLevelProgress(state.totalXp);
 
   const levelTestProgress =
-    state.user?.levelTestCompleted
-      ? 100
-      : getLevelTestPercentage(
+    isLevelTestCompleted(state)
+      ? getLevelTestPercentage(
           state.levelTestScore,
           state.levelTestTotal,
-        );
+        )
+      : 0;
 
-  const activityProgress =
-    getActivityCompletionScore(
-      state,
+  /*
+   * Overall progress combines:
+   * - learning activities
+   * - XP / level progression
+   * - level test
+   *
+   * If the level test has not been completed,
+   * activity + XP still determine progress.
+   */
+
+  if (!isLevelTestCompleted(state)) {
+    return Math.round(
+      (activityProgress.total +
+        levelProgress) /
+        2,
     );
-
-  const xpProgress =
-    getXpProgressSummary(
-      state,
-    ).progress;
+  }
 
   return Math.round(
-    (
+    (activityProgress.total +
       levelProgress +
-      levelTestProgress +
-      activityProgress +
-      xpProgress
-    ) / 4,
+      levelTestProgress) /
+      3,
   );
 }
 
-/* -------------------------------------------------------
-   Main Progress Stats
-------------------------------------------------------- */
+/* =========================================================
+   PROGRESS STATS
+========================================================= */
 
 export function getProgressStats(
   state: AppState,
 ): ProgressStats {
-  const activity =
-    getLearningActivitySummary(
-      state,
+  const totalXp =
+    normalizeProgressNumber(
+      state.totalXp,
     );
 
-  const xp =
-    getXpProgressSummary(
-      state,
+  const level =
+    getLevelFromXp(totalXp);
+
+  const levelTestCompleted =
+    isLevelTestCompleted(state);
+
+  const levelTestScore =
+    normalizeProgressNumber(
+      state.levelTestScore,
+    );
+
+  const levelTestTotal =
+    normalizeProgressNumber(
+      state.levelTestTotal,
     );
 
   const levelTestPercentage =
     getLevelTestPercentage(
-      state.levelTestScore,
-      state.levelTestTotal,
-    );
-
-  const overallProgress =
-    getOverallProgress(
-      state,
+      levelTestScore,
+      levelTestTotal,
     );
 
   const dailyGoal =
     getDailyGoal(state);
 
+  const dailyXp =
+    normalizeProgressNumber(
+      state.progress?.dailyXp,
+    );
+
+  const dailyGoalProgress =
+    dailyGoal <= 0
+      ? 100
+      : Math.min(
+          100,
+          Math.round(
+            (dailyXp / dailyGoal) * 100,
+          ),
+        );
+
   const streak =
-    getStreakSummary(state);
+    getStoredStreakData(state);
 
   return {
     articlesRead:
-      activity.articlesRead,
+      normalizeProgressNumber(
+        state.articlesRead,
+      ),
 
     vocabularyLearned:
-      activity.vocabularyLearned,
+      normalizeProgressNumber(
+        state.vocabularyLearned,
+      ),
 
     practiceCompleted:
-      activity.practiceCompleted,
+      normalizeProgressNumber(
+        state.practiceCompleted,
+      ),
 
     roomsJoined:
-      activity.roomsJoined,
+      normalizeProgressNumber(
+        state.roomsJoined,
+      ),
 
     cardsCollected:
-      activity.cardsCollected,
-
-    totalXp:
-      xp.xp,
-
-    level:
-      state.user?.level ?? "A1",
-
-    levelTestCompleted:
-      state.user
-        ?.levelTestCompleted ??
-      false,
-
-    levelTestScore:
       normalizeProgressNumber(
-        state.levelTestScore,
+        state.cardsCollected,
       ),
 
-    levelTestTotal:
-      normalizeProgressNumber(
-        state.levelTestTotal,
-      ),
+    totalXp,
+
+    level,
+
+    levelTestCompleted,
+
+    levelTestScore,
+
+    levelTestTotal,
 
     levelTestPercentage,
 
-    overallProgress,
+    overallProgress:
+      getOverallProgress(state),
 
-    dailyGoal:
-      dailyGoal.goal,
+    dailyGoal,
 
-    dailyGoalProgress:
-      dailyGoal.progress,
+    dailyGoalProgress,
 
     dailyGoalCompleted:
-      dailyGoal.completed,
+      dailyXp >= dailyGoal,
 
     currentStreak:
       streak.currentStreak,
@@ -761,59 +692,166 @@ export function getProgressStats(
   };
 }
 
-/* -------------------------------------------------------
-   Detailed Progress Statistics
-------------------------------------------------------- */
+/* =========================================================
+   COMPLETE PROGRESS STATISTICS
+========================================================= */
+
+export interface ProgressStatistics
+  extends ProgressStats {
+  xpProgress: XpProgress;
+  currentLevel: Level;
+  nextLevel: Level | null;
+  xpToNextLevel: number;
+  activityProgress: ActivityProgress;
+  levelProgress: number;
+  streakActive: boolean;
+}
 
 export function getProgressStatistics(
   state: AppState,
-) {
+): ProgressStatistics {
   const stats =
     getProgressStats(state);
 
-  const xpSummary =
-    getXpProgressSummary(
-      state,
-    );
+  const xpProgress =
+    getXpProgress(state.totalXp);
 
-  const streak =
-    getStreakSummary(state);
+  const activityProgress =
+    getActivityProgress(state);
 
   return {
     ...stats,
 
-    xpProgress:
-      xpSummary.progress,
+    xpProgress,
 
     currentLevel:
-      xpSummary.level,
+      xpProgress.currentLevel,
 
     nextLevel:
-      xpSummary.nextLevel,
+      xpProgress.nextLevel,
 
     xpToNextLevel:
-      xpSummary.xpToNextLevel,
+      xpProgress.xpToNextLevel,
 
-    activityProgress:
-      getActivityCompletionScore(
-        state,
-      ),
+    activityProgress,
 
     levelProgress:
-      getLevelProgressPercentage(
-        state.user?.level ?? "A1",
-      ),
-
-    currentStreak:
-      streak.currentStreak,
-
-    longestStreak:
-      streak.longestStreak,
-
-    lastActiveDate:
-      streak.lastActiveDate,
+      xpProgress.levelProgress,
 
     streakActive:
       isStreakActive(state),
+  };
+}
+
+/* =========================================================
+   XP / LEVEL SUMMARY
+========================================================= */
+
+export function getLevelSummary(
+  totalXp: number,
+): {
+  level: Level;
+  currentXp: number;
+  currentThreshold: number;
+  nextLevel: Level | null;
+  nextThreshold: number | null;
+  xpToNextLevel: number;
+  progress: number;
+} {
+  const currentXp =
+    normalizeProgressNumber(totalXp);
+
+  const level =
+    getLevelFromXp(currentXp);
+
+  const nextLevel =
+    getNextLevel(level);
+
+  const currentThreshold =
+    LEVEL_THRESHOLDS[level];
+
+  const nextThreshold =
+    nextLevel !== null
+      ? LEVEL_THRESHOLDS[nextLevel]
+      : null;
+
+  return {
+    level,
+    currentXp,
+    currentThreshold,
+    nextLevel,
+    nextThreshold,
+    xpToNextLevel:
+      getXpToNextLevel(currentXp),
+    progress:
+      getLevelProgress(currentXp),
+  };
+}
+
+/* =========================================================
+   XP REWARD HELPERS
+========================================================= */
+
+export const XP_REWARDS = {
+  article: 10,
+  vocabulary: 2,
+  practice: 5,
+  room: 5,
+  card: 3,
+  levelTest: 50,
+  daily: 10,
+} as const;
+
+export function getXpReward(
+  activity:
+    | keyof typeof XP_REWARDS,
+): number {
+  return XP_REWARDS[activity];
+}
+
+/* =========================================================
+   LEVEL INFORMATION
+========================================================= */
+
+export interface LevelInformation {
+  level: Level;
+  threshold: number;
+  percentage: number;
+}
+
+export function getAllLevelInformation(): LevelInformation[] {
+  return LEVEL_ORDER.map((level) => ({
+    level,
+    threshold:
+      LEVEL_THRESHOLDS[level],
+    percentage:
+      LEVEL_PERCENTAGES[level],
+  }));
+}
+
+/* =========================================================
+   SAFE PROGRESS RESET
+========================================================= */
+
+export function createEmptyProgressStats(): ProgressStats {
+  return {
+    articlesRead: 0,
+    vocabularyLearned: 0,
+    practiceCompleted: 0,
+    roomsJoined: 0,
+    cardsCollected: 0,
+    totalXp: 0,
+    level: "A1",
+    levelTestCompleted: false,
+    levelTestScore: 0,
+    levelTestTotal: 0,
+    levelTestPercentage: 0,
+    overallProgress: 0,
+    dailyGoal: DAILY_GOAL_DEFAULT,
+    dailyGoalProgress: 0,
+    dailyGoalCompleted: false,
+    currentStreak: 0,
+    longestStreak: 0,
+    lastActiveDate: "",
   };
 }
