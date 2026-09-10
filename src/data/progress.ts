@@ -437,9 +437,6 @@ export function calculateCurrentStreak(
 /*
   Returns the complete streak status
   without mutating AppState.
-
-  This keeps progress.ts as a calculation layer.
-  Storage/state updates can use this result later.
 */
 export function getStreakSummary(
   state: AppState,
@@ -491,10 +488,6 @@ export function updateStreak(
   const stored =
     getStoredStreakData(state);
 
-  /*
-    If the user has already been active today,
-    do not increase the streak again.
-  */
   if (
     stored.lastActiveDate ===
     today
@@ -757,11 +750,6 @@ export function getProgressStats(
     dailyGoalCompleted:
       dailyGoal.completed,
 
-    /*
-      Streak information.
-      These extra fields are intentionally returned
-      so the future UI can display them directly.
-    */
     currentStreak:
       streak.currentStreak,
 
@@ -829,20 +817,3 @@ export function getProgressStatistics(
       isStreakActive(state),
   };
 }
- 
-
-  
-      
-        
-  
-  
-  
-    
-  
-        
-
-  
-    
-  
-    
-      
