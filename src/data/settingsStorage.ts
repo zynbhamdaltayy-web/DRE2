@@ -1,161 +1,128 @@
-import {
-  createDefaultSettings,
-  normalizeSettings,
-  type AppSettings,
-} from "./settings";
+import type { AppSettings } from "./settings";
+import { createDefaultSettings } from "./settings";
 
-const STORAGE_KEY = "dre2learn-settings";
+const SETTINGS_STORAGE_KEY = "dre2learn_settings";
 
-const STORAGE_VERSION = 2;
-
-export interface SettingsStorageData {
-  version: number;
-  settings: AppSettings;
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
-function createDefaultData(): SettingsStorageData {
+function mergeSettings(
+  stored: Partial<AppSettings>,
+): AppSettings {
+  const defaults = createDefaultSettings();
+
   return {
-    version: STORAGE_VERSION,
-    settings: createDefaultSettings(),
+    ...defaults,
+    ...stored,
+
+    notifications: {
+      ...defaults.notifications,
+      ...(isObject(stored.notifications)
+        ? stored.notifications
+        : {}),
+    },
+
+    privacy: {
+      ...defaults.privacy,
+      ...(isObject(stored.privacy)
+        ? stored.privacy
+        : {}),
+    },
+
+    learning: {
+      ...defaults.learning,
+      ...(isObject(stored.learning)
+        ? stored.learning
+        : {}),
+    },
   };
 }
 
-function readData(): SettingsStorageData {
+export function getStoredSettings(): AppSettings {
   try {
-    const raw =
-      localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
 
     if (!raw) {
-      return createDefaultData();
+      return createDefaultSettings();
     }
 
-    const parsed: unknown =
-      JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
 
-    if (
-      !parsed ||
-      typeof parsed !== "object"
-    ) {
-      return createDefaultData();
+    if (!isObject(parsed)) {
+      return createDefaultSettings();
     }
 
-    const value = parsed as {
-      version?: unknown;
-      settings?: unknown;
-    };
-
-    if (
-      !value.settings ||
-      typeof value.settings !== "object"
-    ) {
-      return createDefaultData();
-    }
-
-    return {
-      version:
-        typeof value.version === "number"
-          ? value.version
-          : 1,
-
-      settings: normalizeSettings(
-        value.settings as Partial<AppSettings>,
-      ),
-    };
+    return mergeSettings(parsed as Partial<AppSettings>);
   } catch {
-    return createDefaultData();
+    return createDefaultSettings();
   }
 }
 
-function writeData(
-  data: SettingsStorageData,
-): void {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(data),
-  );
-}
-
-export function getSettings(): AppSettings {
-  return readData().settings;
-}
-
-export function saveSettings(
+export function saveStoredSettings(
   settings: AppSettings,
 ): AppSettings {
-  const normalized =
-    normalizeSettings(settings);
+  const normalized = mergeSettings(settings);
 
-  writeData({
-    version: STORAGE_VERSION,
-    settings: normalized,
-  });
+  try {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(normalized),
+    );
+  } catch {
+    // Ignore localStorage errors.
+  }
 
   return normalized;
 }
 
-export function updateSettings(
-  changes: Partial<AppSettings>,
+export function updateStoredSettings(
+  updates: Partial<AppSettings>,
 ): AppSettings {
-  const current = getSettings();
+  const current = getStoredSettings();
 
-  const merged: AppSettings = {
+  const updated = mergeSettings({
     ...current,
-
-    ...changes,
+    ...updates,
 
     notifications: {
-      ...(current.notifications ?? {}),
-      ...(changes.notifications ?? {}),
+      ...current.notifications,
+      ...(updates.notifications ?? {}),
     },
 
     privacy: {
-      ...(current.privacy ?? {}),
-      ...(changes.privacy ?? {}),
+      ...current.privacy,
+      ...(updates.privacy ?? {}),
     },
 
     learning: {
-      ...(current.learning ?? {}),
-      ...(changes.learning ?? {}),
+      ...current.learning,
+      ...(updates.learning ?? {}),
     },
-  };
+  });
 
-  return saveSettings(merged);
+  return saveStoredSettings(updated);
 }
 
 export function resetStoredSettings(): AppSettings {
-  const settings =
-    createDefaultSettings();
+  const defaults = createDefaultSettings();
 
-  writeData({
-    version: STORAGE_VERSION,
-    settings,
-  });
-
-  return settings;
-}
-
-export function clearSettingsStorage(): void {
   try {
-    localStorage.removeItem(
-      STORAGE_KEY,
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(defaults),
     );
   } catch {
-    // Ignore storage errors.
+    // Ignore localStorage errors.
   }
+
+  return defaults;
 }
 
-export function initializeSettingsStorage(): void {
+export function clearStoredSettings(): void {
   try {
-    if (
-      !localStorage.getItem(
-        STORAGE_KEY,
-      )
-    ) {
-      writeData(
-        createDefaultData(),
-      );
-    }
+    localStorage.removeItem(SETTINGS_STORAGE_KEY);
   } catch {
-    // Ignore storage errors.
+    // Ignore localStorage errors.
   }
 }
