@@ -6,11 +6,17 @@ import type {
 
 export const defaultAvatar: Avatar = {
   gender: "girl",
+
   skinTone: "medium",
+
   eyeColor: "brown",
+
   hairStyle: "long",
+
   hairColor: "black",
+
   shirtColor: "orange",
+
   hijab: false,
 };
 
@@ -60,6 +66,22 @@ export const initialState: AppState = {
   levelTestScore: 0,
 
   levelTestTotal: 0,
+
+  /* =========================
+     STREAK / DAILY PROGRESS
+  ========================= */
+
+  progress: {
+    currentStreak: 0,
+
+    longestStreak: 0,
+
+    lastActiveDate: "",
+
+    dailyXp: 0,
+
+    dailyGoal: 20,
+  },
 };
 
 export function createDefaultAvatar(): Avatar {
@@ -79,6 +101,18 @@ export function createDefaultState(): AppState {
     user: null,
 
     currentArticleId: null,
+
+    progress: {
+      currentStreak: 0,
+
+      longestStreak: 0,
+
+      lastActiveDate: "",
+
+      dailyXp: 0,
+
+      dailyGoal: 20,
+    },
   };
 }
 
@@ -94,7 +128,11 @@ export function normalizeLevel(
     "C2",
   ];
 
-  if (levels.includes(value as Level)) {
+  if (
+    levels.includes(
+      value as Level,
+    )
+  ) {
     return value as Level;
   }
 
