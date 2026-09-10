@@ -59,30 +59,32 @@ function readData(): ProgressStorageData {
     return {
       currentStreak: Math.max(
         0,
-        value.currentStreak ?? 0,
+        Number(value.currentStreak ?? 0),
       ),
 
       longestStreak: Math.max(
         0,
-        value.longestStreak ?? 0,
+        Number(value.longestStreak ?? 0),
       ),
 
       lastActiveDate:
-        value.lastActiveDate ?? null,
+        typeof value.lastActiveDate === "string"
+          ? value.lastActiveDate
+          : null,
 
       dailyXp: Math.max(
         0,
-        value.dailyXp ?? 0,
+        Number(value.dailyXp ?? 0),
       ),
 
       dailyGoal: Math.max(
         1,
-        value.dailyGoal ?? 20,
+        Number(value.dailyGoal ?? 20),
       ),
 
       totalActivities: Math.max(
         0,
-        value.totalActivities ?? 0,
+        Number(value.totalActivities ?? 0),
       ),
     };
   } catch {
@@ -95,10 +97,14 @@ function readData(): ProgressStorageData {
 function writeData(
   data: ProgressStorageData,
 ): void {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(data),
-  );
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(data),
+    );
+  } catch {
+    // Ignore storage errors safely.
+  }
 }
 
 export function getStoredProgress(): ProgressStorageData {
@@ -164,18 +170,23 @@ export function registerProgressActivity(
       lastActiveDate:
         streakInput.lastActiveDate,
 
-      dailyXp: data.dailyXp,
-      dailyGoal: data.dailyGoal,
+      dailyXp:
+        data.dailyXp,
+
+      dailyGoal:
+        data.dailyGoal,
     },
   };
 
   const updatedStreak =
     updateStreak(streakState);
 
-  const today = todayKey();
+  const today =
+    todayKey();
 
   const sameDay =
-    data.lastActiveDate === today;
+    data.lastActiveDate ===
+    today;
 
   data.currentStreak =
     updatedStreak.currentStreak;
@@ -186,10 +197,17 @@ export function registerProgressActivity(
   data.lastActiveDate =
     updatedStreak.lastActiveDate;
 
-  data.dailyXp = sameDay
-    ? data.dailyXp +
-      Math.max(0, xpEarned)
-    : Math.max(0, xpEarned);
+  data.dailyXp =
+    sameDay
+      ? data.dailyXp +
+        Math.max(
+          0,
+          Number(xpEarned),
+        )
+      : Math.max(
+          0,
+          Number(xpEarned),
+        );
 
   data.totalActivities += 1;
 
@@ -201,9 +219,13 @@ export function registerProgressActivity(
 export function addDailyXP(
   xp: number,
 ): ProgressStorageData {
-  const data = readData();
+  const data =
+    readData();
 
-  data.dailyXp += Math.max(0, xp);
+  data.dailyXp += Math.max(
+    0,
+    Number(xp),
+  );
 
   writeData(data);
 
@@ -213,12 +235,16 @@ export function addDailyXP(
 export function setDailyGoal(
   goal: number,
 ): ProgressStorageData {
-  const data = readData();
+  const data =
+    readData();
 
-  data.dailyGoal = Math.max(
-    1,
-    Math.floor(goal),
-  );
+  data.dailyGoal =
+    Math.max(
+      1,
+      Math.floor(
+        Number(goal),
+      ),
+    );
 
   writeData(data);
 
@@ -226,7 +252,8 @@ export function setDailyGoal(
 }
 
 export function resetDailyProgress(): ProgressStorageData {
-  const data = readData();
+  const data =
+    readData();
 
   data.dailyXp = 0;
 
@@ -240,20 +267,27 @@ export function getStoredProgressSummary(): ProgressStorageData {
 }
 
 export function clearProgressStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(
+      STORAGE_KEY,
+    );
+  } catch {
+    // Ignore storage errors safely.
+  }
 }
 
 export function initializeProgressStorage(): void {
-  if (
-    !localStorage.getItem(STORAGE_KEY)
-  ) {
-    writeData(DEFAULT_DATA);
+  try {
+    if (
+      !localStorage.getItem(
+        STORAGE_KEY,
+      )
+    ) {
+      writeData({
+        ...DEFAULT_DATA,
+      });
+    }
+  } catch {
+    // Ignore storage errors safely.
   }
 }
-      
-      
-    
-  
-  
-
-    
