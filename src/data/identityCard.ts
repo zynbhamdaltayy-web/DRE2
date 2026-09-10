@@ -36,7 +36,11 @@ export const IDENTITY_CARD_THEME = {
 // CARD CONSTANTS
 // ======================================================
 
-export const IDENTITY_CARD_VALIDITY_DAYS = 365;
+/*
+ * Identity Card validity:
+ * 30 days from the issue date.
+ */
+export const IDENTITY_CARD_VALIDITY_DAYS = 30;
 
 export const IDENTITY_CARD_RENEWAL_COST =
   IDENTITY_CARD_RENEWAL_XP;
@@ -685,3 +689,12 @@ export const IDENTITY_CARD_VISUALS = {
   transparentCountryMap:
     true,
 } as const;
+
+
+  
+
+  
+    
+  
+  
+
