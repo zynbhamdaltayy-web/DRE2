@@ -4,6 +4,7 @@ import {
   normalizeCollectedCard,
   normalizeLearningCard,
   useCollectedCard,
+  playCollectedCard,
   type CollectedCard,
   type LearningCard,
 } from "./cards";
@@ -26,7 +27,10 @@ function readData(): CardStorageData {
       localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
-      return { ...DEFAULT_DATA };
+      return {
+        cards: [],
+        collected: [],
+      };
     }
 
     const parsed: unknown =
@@ -36,7 +40,10 @@ function readData(): CardStorageData {
       !parsed ||
       typeof parsed !== "object"
     ) {
-      return { ...DEFAULT_DATA };
+      return {
+        cards: [],
+        collected: [],
+      };
     }
 
     const value =
@@ -51,6 +58,7 @@ function readData(): CardStorageData {
               ),
           )
         : [],
+
       collected: Array.isArray(
         value.collected,
       )
@@ -63,7 +71,10 @@ function readData(): CardStorageData {
         : [],
     };
   } catch {
-    return { ...DEFAULT_DATA };
+    return {
+      cards: [],
+      collected: [],
+    };
   }
 }
 
@@ -75,6 +86,10 @@ function writeData(
     JSON.stringify(data),
   );
 }
+
+// ======================================================
+// GET
+// ======================================================
 
 export function getCardStorage(): CardStorageData {
   return readData();
@@ -94,10 +109,15 @@ export function getCollectedCards(): CollectedCard[] {
   return readData().collected;
 }
 
+// ======================================================
+// CREATE / SAVE CARD
+// ======================================================
+
 export function saveLearningCard(
   card: LearningCard,
 ): LearningCard {
   const data = readData();
+
   const normalized =
     normalizeLearningCard(card);
 
@@ -127,10 +147,22 @@ export function createAndSaveLearningCard(
   );
 }
 
+// ======================================================
+// COLLECT
+// ======================================================
+
 export function collectStoredCard(
   cardId: string,
 ): boolean {
   const data = readData();
+
+  const cardExists = data.cards.some(
+    (card) => card.id === cardId,
+  );
+
+  if (!cardExists) {
+    return false;
+  }
 
   if (
     data.collected.some(
@@ -149,6 +181,10 @@ export function collectStoredCard(
 
   return true;
 }
+
+// ======================================================
+// USE CARD
+// ======================================================
 
 export function useStoredCard(
   cardId: string,
@@ -173,12 +209,44 @@ export function useStoredCard(
   return true;
 }
 
+// ======================================================
+// PLAY CARD
+// ======================================================
+
+export function playStoredCard(
+  cardId: string,
+): boolean {
+  const data = readData();
+
+  const exists = data.collected.some(
+    (card) => card.cardId === cardId,
+  );
+
+  if (!exists) {
+    return false;
+  }
+
+  data.collected = playCollectedCard(
+    data.collected,
+    cardId,
+  );
+
+  writeData(data);
+
+  return true;
+}
+
+// ======================================================
+// DELETE
+// ======================================================
+
 export function deleteLearningCard(
   cardId: string,
 ): boolean {
   const data = readData();
 
-  const before = data.cards.length;
+  const before =
+    data.cards.length;
 
   data.cards = data.cards.filter(
     (card) => card.id !== cardId,
@@ -189,7 +257,9 @@ export function deleteLearningCard(
       (card) => card.cardId !== cardId,
     );
 
-  if (before === data.cards.length) {
+  if (
+    before === data.cards.length
+  ) {
     return false;
   }
 
@@ -198,12 +268,26 @@ export function deleteLearningCard(
   return true;
 }
 
+// ======================================================
+// CLEAR
+// ======================================================
+
 export function clearCardStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(
+    STORAGE_KEY,
+  );
 }
 
+// ======================================================
+// INITIALIZE
+// ======================================================
+
 export function initializeCardStorage(): void {
-  if (!localStorage.getItem(STORAGE_KEY)) {
+  if (
+    !localStorage.getItem(
+      STORAGE_KEY,
+    )
+  ) {
     writeData(DEFAULT_DATA);
   }
 }
