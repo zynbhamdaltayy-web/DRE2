@@ -4,6 +4,16 @@ import {
   joinRoom,
   leaveRoom,
   normalizeRoom,
+  isRoomHost,
+  setRoomCameraEnabled,
+  setRoomMicrophoneEnabled,
+  setRoomScreenShareEnabled,
+  setParticipantCameraEnabled,
+  setParticipantMicrophoneEnabled,
+  setParticipantScreenShareEnabled,
+  canUseRoomCamera,
+  canUseRoomMicrophone,
+  canUseRoomScreenShare,
   type Room,
   type RoomInput,
 } from "./rooms";
@@ -20,6 +30,10 @@ export interface RoomStorageData {
 const DEFAULT_DATA: RoomStorageData = {
   rooms: [],
 };
+
+// ======================================================
+// STORAGE
+// ======================================================
 
 function readData(): RoomStorageData {
   try {
@@ -76,6 +90,10 @@ function writeData(
   );
 }
 
+// ======================================================
+// GET / SAVE
+// ======================================================
+
 export function getRoomStorage():
   RoomStorageData {
   return readData();
@@ -90,6 +108,25 @@ export function saveRoomStorage(
 export function getAllRooms():
   Room[] {
   return readData().rooms;
+}
+
+export function getRoomById(
+  roomId: string,
+): Room | null {
+  const normalizedRoomId =
+    roomId.trim();
+
+  if (!normalizedRoomId) {
+    return null;
+  }
+
+  return (
+    readData().rooms.find(
+      (room) =>
+        room.id ===
+        normalizedRoomId,
+    ) ?? null
+  );
 }
 
 export function saveRoom(
@@ -121,6 +158,10 @@ export function saveRoom(
   return normalized;
 }
 
+// ======================================================
+// CREATE ROOM
+// ======================================================
+
 export function createAndSaveRoom(
   input: RoomInput,
 ): Room {
@@ -128,6 +169,10 @@ export function createAndSaveRoom(
     createRoom(input),
   );
 }
+
+// ======================================================
+// JOIN ROOM
+// ======================================================
 
 export function joinStoredRoom(
   roomId: string,
@@ -189,6 +234,10 @@ export function joinStoredRoom(
   return updated;
 }
 
+// ======================================================
+// LEAVE ROOM
+// ======================================================
+
 export function leaveStoredRoom(
   roomId: string,
   userId: string,
@@ -232,6 +281,10 @@ export function leaveStoredRoom(
   return updated;
 }
 
+// ======================================================
+// END ROOM
+// ======================================================
+
 /**
  * Only the room host can end the room.
  */
@@ -252,8 +305,10 @@ export function endStoredRoom(
   }
 
   if (
-    room.hostId !==
-    requesterId.trim()
+    !isRoomHost(
+      room,
+      requesterId,
+    )
   ) {
     return null;
   }
@@ -276,6 +331,395 @@ export function endStoredRoom(
 
   return updated;
 }
+
+// ======================================================
+// OWNER — GLOBAL CAMERA
+// ======================================================
+
+/**
+ * The room host enables or disables
+ * camera access for everyone.
+ */
+export function setStoredRoomCameraEnabled(
+  roomId: string,
+  requesterId: string,
+  enabled: boolean,
+): Room | null {
+  const data = readData();
+
+  const room =
+    data.rooms.find(
+      (item) =>
+        item.id === roomId,
+    );
+
+  if (!room) {
+    return null;
+  }
+
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return null;
+  }
+
+  const updated =
+    setRoomCameraEnabled(
+      room,
+      requesterId,
+      enabled,
+    );
+
+  data.rooms =
+    data.rooms.map(
+      (item) =>
+        item.id === roomId
+          ? updated
+          : item,
+    );
+
+  writeData(data);
+
+  return updated;
+}
+
+// ======================================================
+// OWNER — GLOBAL MICROPHONE
+// ======================================================
+
+/**
+ * The room host enables or disables
+ * microphone access for everyone.
+ */
+export function setStoredRoomMicrophoneEnabled(
+  roomId: string,
+  requesterId: string,
+  enabled: boolean,
+): Room | null {
+  const data = readData();
+
+  const room =
+    data.rooms.find(
+      (item) =>
+        item.id === roomId,
+    );
+
+  if (!room) {
+    return null;
+  }
+
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return null;
+  }
+
+  const updated =
+    setRoomMicrophoneEnabled(
+      room,
+      requesterId,
+      enabled,
+    );
+
+  data.rooms =
+    data.rooms.map(
+      (item) =>
+        item.id === roomId
+          ? updated
+          : item,
+    );
+
+  writeData(data);
+
+  return updated;
+}
+
+// ======================================================
+// OWNER — GLOBAL SCREEN SHARE
+// ======================================================
+
+/**
+ * The room host enables or disables
+ * screen sharing for everyone.
+ */
+export function setStoredRoomScreenShareEnabled(
+  roomId: string,
+  requesterId: string,
+  enabled: boolean,
+): Room | null {
+  const data = readData();
+
+  const room =
+    data.rooms.find(
+      (item) =>
+        item.id === roomId,
+    );
+
+  if (!room) {
+    return null;
+  }
+
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return null;
+  }
+
+  const updated =
+    setRoomScreenShareEnabled(
+      room,
+      requesterId,
+      enabled,
+    );
+
+  data.rooms =
+    data.rooms.map(
+      (item) =>
+        item.id === roomId
+          ? updated
+          : item,
+    );
+
+  writeData(data);
+
+  return updated;
+}
+
+// ======================================================
+// OWNER — INDIVIDUAL CAMERA
+// ======================================================
+
+/**
+ * The room host can disable or enable
+ * the camera of one participant.
+ */
+export function setStoredParticipantCameraEnabled(
+  roomId: string,
+  requesterId: string,
+  participantId: string,
+  enabled: boolean,
+): Room | null {
+  const data = readData();
+
+  const room =
+    data.rooms.find(
+      (item) =>
+        item.id === roomId,
+    );
+
+  if (!room) {
+    return null;
+  }
+
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return null;
+  }
+
+  const updated =
+    setParticipantCameraEnabled(
+      room,
+      requesterId,
+      participantId,
+      enabled,
+    );
+
+  data.rooms =
+    data.rooms.map(
+      (item) =>
+        item.id === roomId
+          ? updated
+          : item,
+    );
+
+  writeData(data);
+
+  return updated;
+}
+
+// ======================================================
+// OWNER — INDIVIDUAL MICROPHONE
+// ======================================================
+
+/**
+ * The room host can disable or enable
+ * the microphone of one participant.
+ */
+export function setStoredParticipantMicrophoneEnabled(
+  roomId: string,
+  requesterId: string,
+  participantId: string,
+  enabled: boolean,
+): Room | null {
+  const data = readData();
+
+  const room =
+    data.rooms.find(
+      (item) =>
+        item.id === roomId,
+    );
+
+  if (!room) {
+    return null;
+  }
+
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return null;
+  }
+
+  const updated =
+    setParticipantMicrophoneEnabled(
+      room,
+      requesterId,
+      participantId,
+      enabled,
+    );
+
+  data.rooms =
+    data.rooms.map(
+      (item) =>
+        item.id === roomId
+          ? updated
+          : item,
+    );
+
+  writeData(data);
+
+  return updated;
+}
+
+// ======================================================
+// OWNER — INDIVIDUAL SCREEN SHARE
+// ======================================================
+
+/**
+ * The room host can disable or enable
+ * screen sharing for one participant.
+ */
+export function setStoredParticipantScreenShareEnabled(
+  roomId: string,
+  requesterId: string,
+  participantId: string,
+  enabled: boolean,
+): Room | null {
+  const data = readData();
+
+  const room =
+    data.rooms.find(
+      (item) =>
+        item.id === roomId,
+    );
+
+  if (!room) {
+    return null;
+  }
+
+  if (
+    !isRoomHost(
+      room,
+      requesterId,
+    )
+  ) {
+    return null;
+  }
+
+  const updated =
+    setParticipantScreenShareEnabled(
+      room,
+      requesterId,
+      participantId,
+      enabled,
+    );
+
+  data.rooms =
+    data.rooms.map(
+      (item) =>
+        item.id === roomId
+          ? updated
+          : item,
+    );
+
+  writeData(data);
+
+  return updated;
+}
+
+// ======================================================
+// PERMISSION CHECKS
+// ======================================================
+
+export function canStoredUserUseCamera(
+  roomId: string,
+  userId: string,
+): boolean {
+  const room =
+    getRoomById(roomId);
+
+  if (!room) {
+    return false;
+  }
+
+  return canUseRoomCamera(
+    room,
+    userId,
+  );
+}
+
+export function canStoredUserUseMicrophone(
+  roomId: string,
+  userId: string,
+): boolean {
+  const room =
+    getRoomById(roomId);
+
+  if (!room) {
+    return false;
+  }
+
+  return canUseRoomMicrophone(
+    room,
+    userId,
+  );
+}
+
+export function canStoredUserUseScreenShare(
+  roomId: string,
+  userId: string,
+): boolean {
+  const room =
+    getRoomById(roomId);
+
+  if (!room) {
+    return false;
+  }
+
+  return canUseRoomScreenShare(
+    room,
+    userId,
+  );
+}
+
+// ======================================================
+// DELETE ROOM
+// ======================================================
 
 export function deleteRoom(
   roomId: string,
@@ -303,11 +747,19 @@ export function deleteRoom(
   return true;
 }
 
+// ======================================================
+// CLEAR STORAGE
+// ======================================================
+
 export function clearRoomStorage(): void {
   localStorage.removeItem(
     STORAGE_KEY,
   );
 }
+
+// ======================================================
+// INITIALIZE STORAGE
+// ======================================================
 
 export function initializeRoomStorage(): void {
   if (
@@ -320,5 +772,8 @@ export function initializeRoomStorage(): void {
     );
   }
 }
-
     
+  
+
+  
+
