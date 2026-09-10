@@ -1,17 +1,20 @@
 import {
-  collectCard,
   createLearningCard,
   normalizeCollectedCard,
   normalizeLearningCard,
-  useCollectedCard,
-  playCollectedCard,
-  completeCollectedCard,
   type CollectedCard,
   type LearningCard,
 } from "./cards";
 
-const STORAGE_KEY =
-  "dre2learn-cards";
+import {
+  collectCardWithXP,
+  useCard,
+  playCard,
+  completeCardWithXP,
+  type AppState,
+} from "../storage";
+
+const STORAGE_KEY = "dre2learn-cards";
 
 export interface CardStorageData {
   cards: LearningCard[];
@@ -24,15 +27,12 @@ const DEFAULT_DATA: CardStorageData = {
 };
 
 // ======================================================
-// READ / WRITE
+// INTERNAL STORAGE
 // ======================================================
 
 function readData(): CardStorageData {
   try {
-    const raw =
-      localStorage.getItem(
-        STORAGE_KEY,
-      );
+    const raw = localStorage.getItem(STORAGE_KEY);
 
     if (!raw) {
       return {
@@ -41,13 +41,11 @@ function readData(): CardStorageData {
       };
     }
 
-    const parsed: unknown =
-      JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
 
     if (
       !parsed ||
-      typeof parsed !==
-        "object"
+      typeof parsed !== "object"
     ) {
       return {
         cards: [],
@@ -59,29 +57,17 @@ function readData(): CardStorageData {
       parsed as Partial<CardStorageData>;
 
     return {
-      cards:
-        Array.isArray(
-          value.cards,
-        )
-          ? value.cards.map(
-              (card) =>
-                normalizeLearningCard(
-                  card,
-                ),
-            )
-          : [],
+      cards: Array.isArray(value.cards)
+        ? value.cards.map((card) =>
+            normalizeLearningCard(card),
+          )
+        : [],
 
-      collected:
-        Array.isArray(
-          value.collected,
-        )
-          ? value.collected.map(
-              (card) =>
-                normalizeCollectedCard(
-                  card,
-                ),
-            )
-          : [],
+      collected: Array.isArray(value.collected)
+        ? value.collected.map((card) =>
+            normalizeCollectedCard(card),
+          )
+        : [],
     };
   } catch {
     return {
@@ -98,6 +84,56 @@ function writeData(
     STORAGE_KEY,
     JSON.stringify(data),
   );
+}
+
+// ======================================================
+// APP STATE HELPERS
+// ======================================================
+
+function createCardAppState(
+  collectedCards: CollectedCard[],
+): AppState {
+  return {
+    page: "home",
+
+    user: null,
+
+    vocabulary: [],
+
+    completedArticles: [],
+
+    practiceScore: 0,
+
+    practiceAnswered: 0,
+
+    currentArticleId: null,
+
+    selectedLibraryLevel: "A1",
+
+    selectedTopic: "Daily Life",
+
+    selectedPracticeLevel: "A1",
+
+    isAuthenticated: false,
+
+    totalXp: 0,
+
+    articlesRead: 0,
+
+    vocabularyLearned: 0,
+
+    practiceCompleted: 0,
+
+    roomsJoined: 0,
+
+    cardsCollected: collectedCards.length,
+
+    levelTestScore: 0,
+
+    levelTestTotal: 0,
+
+    collectedCards: collectedCards,
+  };
 }
 
 // ======================================================
@@ -132,15 +168,12 @@ export function saveLearningCard(
   const data = readData();
 
   const normalized =
-    normalizeLearningCard(
-      card,
-    );
+    normalizeLearningCard(card);
 
   const index =
     data.cards.findIndex(
       (item) =>
-        item.id ===
-        normalized.id,
+        item.id === normalized.id,
     );
 
   if (index >= 0) {
@@ -164,53 +197,103 @@ export function createAndSaveLearningCard(
   >,
 ): LearningCard {
   return saveLearningCard(
-    createLearningCard(
-      input,
-    ),
+    createLearningCard(input),
   );
 }
 
 // ======================================================
-// COLLECT
+// COLLECT CARD
 // ======================================================
+// Collection is now connected to storage.ts.
+// Cost: 1 XP.
+// The XP deduction is handled by collectCardWithXP().
+// ======================================================
+
+export interface CollectStoredCardResult {
+  success: boolean;
+  state: AppState;
+  xpCost: number;
+}
 
 export function collectStoredCard(
   cardId: string,
-): boolean {
+): CollectStoredCardResult {
   const data = readData();
 
-  const cardExists =
-    data.cards.some(
-      (card) =>
-        card.id === cardId,
+  const card =
+    data.cards.find(
+      (item) =>
+        item.id === cardId,
     );
 
-  if (!cardExists) {
-    return false;
+  if (!card) {
+    return {
+      success: false,
+      state: createCardAppState(
+        data.collected,
+      ),
+      xpCost: 0,
+    };
   }
+
+  const alreadyCollected =
+    data.collected.some(
+      (item) =>
+        item.cardId === cardId,
+    );
+
+  if (alreadyCollected) {
+    return {
+      success: false,
+      state: createCardAppState(
+        data.collected,
+      ),
+      xpCost: 0,
+    };
+  }
+
+  const state =
+    createCardAppState(
+      data.collected,
+    );
+
+  const result =
+    collectCardWithXP(
+      state,
+      card,
+    );
 
   if (
-    data.collected.some(
-      (card) =>
-        card.cardId === cardId,
-    )
+    result === state ||
+    !result.collectedCards
   ) {
-    return false;
+    return {
+      success: false,
+      state,
+      xpCost: 0,
+    };
   }
 
+  const collected =
+    result.collectedCards;
+
   data.collected =
-    collectCard(
-      data.collected,
-      cardId,
-    );
+    collected;
 
   writeData(data);
 
-  return true;
+  return {
+    success: true,
+    state: result,
+    xpCost: card.xpCost ?? 1,
+  };
 }
 
 // ======================================================
 // USE CARD
+// ======================================================
+// Does NOT give XP.
+// Only increases timesUsed.
 // ======================================================
 
 export function useStoredCard(
@@ -218,21 +301,46 @@ export function useStoredCard(
 ): boolean {
   const data = readData();
 
+  const card =
+    data.cards.find(
+      (item) =>
+        item.id === cardId,
+    );
+
+  if (!card) {
+    return false;
+  }
+
   const exists =
     data.collected.some(
-      (card) =>
-        card.cardId === cardId,
+      (item) =>
+        item.cardId === cardId,
     );
 
   if (!exists) {
     return false;
   }
 
-  data.collected =
-    useCollectedCard(
+  const state =
+    createCardAppState(
       data.collected,
-      cardId,
     );
+
+  const updatedState =
+    useCard(
+      state,
+      card,
+    );
+
+  if (
+    updatedState === state ||
+    !updatedState.collectedCards
+  ) {
+    return false;
+  }
+
+  data.collected =
+    updatedState.collectedCards;
 
   writeData(data);
 
@@ -242,27 +350,55 @@ export function useStoredCard(
 // ======================================================
 // PLAY CARD
 // ======================================================
+// Does NOT give XP.
+// Only increases timesPlayed.
+// ======================================================
 
 export function playStoredCard(
   cardId: string,
 ): boolean {
   const data = readData();
 
+  const card =
+    data.cards.find(
+      (item) =>
+        item.id === cardId,
+    );
+
+  if (!card) {
+    return false;
+  }
+
   const exists =
     data.collected.some(
-      (card) =>
-        card.cardId === cardId,
+      (item) =>
+        item.cardId === cardId,
     );
 
   if (!exists) {
     return false;
   }
 
-  data.collected =
-    playCollectedCard(
+  const state =
+    createCardAppState(
       data.collected,
-      cardId,
     );
+
+  const updatedState =
+    playCard(
+      state,
+      card,
+    );
+
+  if (
+    updatedState === state ||
+    !updatedState.collectedCards
+  ) {
+    return false;
+  }
+
+  data.collected =
+    updatedState.collectedCards;
 
   writeData(data);
 
@@ -271,6 +407,9 @@ export function playStoredCard(
 
 // ======================================================
 // COMPLETE CARD
+// ======================================================
+// Completion reward:
+// +3 XP exactly once.
 // ======================================================
 
 export interface CompleteStoredCardResult {
@@ -303,8 +442,7 @@ export function completeStoredCard(
   const collected =
     data.collected.some(
       (item) =>
-        item.cardId ===
-        cardId,
+        item.cardId === cardId,
     );
 
   if (!collected) {
@@ -315,21 +453,38 @@ export function completeStoredCard(
     };
   }
 
-  const result =
-    completeCollectedCard(
+  const state =
+    createCardAppState(
       data.collected,
+    );
+
+  const result =
+    completeCardWithXP(
+      state,
       card,
     );
 
+  if (
+    result === state ||
+    !result.collectedCards
+  ) {
+    return {
+      success: false,
+      rewardGranted: false,
+      xpReward: 0,
+    };
+  }
+
   data.collected =
-    result.cards;
+    result.collectedCards;
 
   writeData(data);
 
   return {
     success: true,
+
     rewardGranted:
-      result.rewardGranted,
+      result.xpReward > 0,
 
     xpReward:
       result.xpReward,
@@ -397,3 +552,16 @@ export function initializeCardStorage(): void {
     );
   }
 }
+        
+          
+  
+    
+
+  
+
+
+
+
+  
+  
+        
