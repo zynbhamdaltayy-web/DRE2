@@ -1,26 +1,34 @@
 import {
-  GoogleAuthProvider,
   signInWithPopup,
   signOut,
   type User,
 } from "firebase/auth";
 
 import { auth, googleProvider } from "./firebase";
+
 import {
   createOwnerAccount,
   createUserAccount,
   DRE2LEARN_OWNER_ID,
   DRE2LEARN_USERNAME,
-  DRE2LEARN_DISPLAY_NAME,
   type Account,
 } from "./data/accounts";
 
-export const DRE2LEARN_OWNER_EMAIL = "zynbhamdaltayy@gmail.com";
+import {
+  createOrRestoreGoogleAccount,
+  setCurrentAccount,
+} from "./data/accountStorage";
 
-export function isDRE2learnOwnerEmail(email: string | null | undefined): boolean {
+export const DRE2LEARN_OWNER_EMAIL =
+  "zynbhamdaltayy@gmail.com";
+
+export function isDRE2learnOwnerEmail(
+  email: string | null | undefined,
+): boolean {
   return (
     typeof email === "string" &&
-    email.trim().toLowerCase() === DRE2LEARN_OWNER_EMAIL
+    email.trim().toLowerCase() ===
+      DRE2LEARN_OWNER_EMAIL
   );
 }
 
@@ -28,23 +36,29 @@ export async function signInWithGoogle(): Promise<{
   firebaseUser: User;
   account: Account;
 }> {
-  const result = await signInWithPopup(auth, googleProvider);
+  const result = await signInWithPopup(
+    auth,
+    googleProvider,
+  );
+
   const firebaseUser = result.user;
 
-  const email = firebaseUser.email?.trim().toLowerCase() ?? "";
+  const email =
+    firebaseUser.email
+      ?.trim()
+      .toLowerCase() ?? "";
 
+  /*
+   * The official DRE2learn Owner account.
+   */
   if (isDRE2learnOwnerEmail(email)) {
-    const owner = createOwnerAccount({
-      id: DRE2LEARN_OWNER_ID,
-      username: DRE2LEARN_USERNAME,
-      displayName: DRE2LEARN_DISPLAY_NAME,
-      email,
-      avatar: null,
-      level: "A1",
-      xp: 0,
-      countryCode: "",
-      bio: "Official DRE2learn account.",
-    });
+    const owner = createOwnerAccount(
+      DRE2LEARN_OWNER_EMAIL,
+      "",
+      null,
+    );
+
+    setCurrentAccount(owner);
 
     return {
       firebaseUser,
@@ -52,27 +66,38 @@ export async function signInWithGoogle(): Promise<{
     };
   }
 
-  const user = createUserAccount({
-    id: firebaseUser.uid,
-    username:
-      firebaseUser.displayName?.trim() ||
-      email.split("@")[0] ||
-      "User",
-    displayName:
-      firebaseUser.displayName?.trim() ||
-      email.split("@")[0] ||
-      "User",
+  /*
+   * Normal Google user.
+   */
+  const username =
+    firebaseUser.displayName?.trim() ||
+    email.split("@")[0] ||
+    "User";
+
+  const user = createUserAccount(
+    firebaseUser.uid,
+    username,
     email,
-    avatar: null,
-    level: "A1",
-    xp: 0,
-    countryCode: "",
-    bio: "",
-  });
+    "",
+    null,
+  );
+
+  setCurrentAccount(user);
+
+  /*
+   * Keep account storage synchronized
+   * with the Google account.
+   */
+  const restored =
+    createOrRestoreGoogleAccount(
+      firebaseUser,
+    );
+
+  setCurrentAccount(restored);
 
   return {
     firebaseUser,
-    account: user,
+    account: restored,
   };
 }
 
@@ -85,9 +110,18 @@ export function getCurrentFirebaseUser(): User | null {
 }
 
 export function isCurrentUserOwner(): boolean {
-  return isDRE2learnOwnerEmail(auth.currentUser?.email);
+  return isDRE2learnOwnerEmail(
+    auth.currentUser?.email,
+  );
 }
 
-export function getGoogleProvider(): GoogleAuthProvider {
+export function getGoogleProvider() {
   return googleProvider;
 }
+
+export {
+  DRE2LEARN_OWNER_ID,
+  DRE2LEARN_USERNAME,
+};
+  
+    
