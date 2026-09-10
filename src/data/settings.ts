@@ -1,264 +1,231 @@
-export type MessagePrivacy =
-  | "mutual-followers"
-  | "accepted-requests"
-  | "no-one";
+export type ThemeMode =
+  | "light"
+  | "dark"
+  | "system";
 
-export type ProfileVisibility =
-  | "public"
-  | "limited";
+export type AppLanguage =
+  | "ar"
+  | "en"
+  | "zh-CN"
+  | "ru"
+  | "ku"
+  | "tr"
+  | "fr"
+  | "de"
+  | "es"
+  | "it"
+  | "ja"
+  | "ko";
 
-export interface UserSettings {
-  userId: string;
-
-  language: string;
-
-  messagePrivacy: MessagePrivacy;
-
-  profileVisibility: ProfileVisibility;
-
-  notificationsEnabled: boolean;
-
+export interface NotificationSettings {
+  pushNotifications: boolean;
   messageNotifications: boolean;
-
   followNotifications: boolean;
-
-  writerNotifications: boolean;
-
-  officialNotifications: boolean;
-
-  soundEnabled: boolean;
-
-  speechEnabled: boolean;
-
-  showOnlineStatus: boolean;
-
-  allowRoomInvites: boolean;
-
-  blockedUserIds: string[];
-
-  updatedAt: string;
+  learningNotifications: boolean;
+  officialUpdates: boolean;
 }
 
-export const DEFAULT_USER_SETTINGS = {
-  language: "en",
-  messagePrivacy: "accepted-requests" as MessagePrivacy,
-  profileVisibility: "public" as ProfileVisibility,
-  notificationsEnabled: true,
-  messageNotifications: true,
-  followNotifications: true,
-  writerNotifications: true,
-  officialNotifications: true,
-  soundEnabled: true,
-  speechEnabled: true,
-  showOnlineStatus: true,
-  allowRoomInvites: true,
+export interface PrivacySettings {
+  profileVisible: boolean;
+  showOnlineStatus: boolean;
+  allowMessageRequests: boolean;
+  allowRoomInvites: boolean;
+}
+
+export interface LearningSettings {
+  dailyGoal: number;
+  defaultLevel: string;
+  defaultLanguage: string;
+  autoplayAudio: boolean;
+}
+
+export interface AppSettings {
+  theme: ThemeMode;
+  language: AppLanguage;
+  notifications: NotificationSettings;
+  privacy: PrivacySettings;
+  learning: LearningSettings;
+}
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  theme: "system",
+  language: "ar",
+
+  notifications: {
+    pushNotifications: true,
+    messageNotifications: true,
+    followNotifications: true,
+    learningNotifications: true,
+    officialUpdates: true,
+  },
+
+  privacy: {
+    profileVisible: true,
+    showOnlineStatus: true,
+    allowMessageRequests: true,
+    allowRoomInvites: true,
+  },
+
+  learning: {
+    dailyGoal: 20,
+    defaultLevel: "A1",
+    defaultLanguage: "English",
+    autoplayAudio: true,
+  },
 };
 
-export function createDefaultUserSettings(
-  userId: string,
-): UserSettings {
+function cleanString(
+  value: unknown,
+): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
+}
+
+export function createDefaultSettings(): AppSettings {
   return {
-    userId,
-    ...DEFAULT_USER_SETTINGS,
-    blockedUserIds: [],
-    updatedAt: new Date().toISOString(),
+    ...DEFAULT_SETTINGS,
+    notifications: {
+      ...DEFAULT_SETTINGS.notifications,
+    },
+    privacy: {
+      ...DEFAULT_SETTINGS.privacy,
+    },
+    learning: {
+      ...DEFAULT_SETTINGS.learning,
+    },
   };
 }
 
-export function updateUserSettings(
-  settings: UserSettings,
-  changes: Partial<
-    Omit<
-      UserSettings,
-      "userId" | "updatedAt"
-    >
-  >,
-): UserSettings {
-  return {
-    ...settings,
-    ...changes,
-    blockedUserIds: changes.blockedUserIds
-      ? Array.from(
-          new Set(changes.blockedUserIds),
-        )
-      : settings.blockedUserIds,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-export function setMessagePrivacy(
-  settings: UserSettings,
-  value: MessagePrivacy,
-): UserSettings {
-  return updateUserSettings(settings, {
-    messagePrivacy: value,
-  });
-}
-
-export function setProfileVisibility(
-  settings: UserSettings,
-  value: ProfileVisibility,
-): UserSettings {
-  return updateUserSettings(settings, {
-    profileVisibility: value,
-  });
-}
-
-export function setNotificationsEnabled(
-  settings: UserSettings,
-  enabled: boolean,
-): UserSettings {
-  return updateUserSettings(settings, {
-    notificationsEnabled: enabled,
-  });
-}
-
-export function setSoundEnabled(
-  settings: UserSettings,
-  enabled: boolean,
-): UserSettings {
-  return updateUserSettings(settings, {
-    soundEnabled: enabled,
-  });
-}
-
-export function setSpeechEnabled(
-  settings: UserSettings,
-  enabled: boolean,
-): UserSettings {
-  return updateUserSettings(settings, {
-    speechEnabled: enabled,
-  });
-}
-
-export function blockUser(
-  settings: UserSettings,
-  userId: string,
-): UserSettings {
-  if (!userId.trim()) {
-    return settings;
-  }
-
-  return updateUserSettings(settings, {
-    blockedUserIds: Array.from(
-      new Set([
-        ...settings.blockedUserIds,
-        userId.trim(),
-      ]),
-    ),
-  });
-}
-
-export function unblockUser(
-  settings: UserSettings,
-  userId: string,
-): UserSettings {
-  return updateUserSettings(settings, {
-    blockedUserIds:
-      settings.blockedUserIds.filter(
-        (id) => id !== userId,
-      ),
-  });
-}
-
-export function isUserBlocked(
-  settings: UserSettings,
-  userId: string,
-): boolean {
-  return settings.blockedUserIds.includes(userId);
-}
-
-export function canReceiveMessageFrom(
-  settings: UserSettings,
-  senderId: string,
-  mutualAccepted: boolean,
-): boolean {
-  if (isUserBlocked(settings, senderId)) {
-    return false;
-  }
-
-  if (settings.messagePrivacy === "no-one") {
-    return false;
-  }
-
-  if (
-    settings.messagePrivacy ===
-    "accepted-requests"
-  ) {
-    return mutualAccepted;
-  }
-
-  if (
-    settings.messagePrivacy ===
-    "mutual-followers"
-  ) {
-    return mutualAccepted;
-  }
-
-  return false;
-}
-
-export function shouldShowNotification(
-  settings: UserSettings,
-  type:
-    | "message"
-    | "follow"
-    | "writer"
-    | "official",
-): boolean {
-  if (!settings.notificationsEnabled) {
-    return false;
-  }
-
-  switch (type) {
-    case "message":
-      return settings.messageNotifications;
-
-    case "follow":
-      return settings.followNotifications;
-
-    case "writer":
-      return settings.writerNotifications;
-
-    case "official":
-      return settings.officialNotifications;
-
-    default:
-      return true;
-  }
-}
-
-export function canViewProfile(
-  settings: UserSettings,
-  viewerIsFollower: boolean,
-): boolean {
-  if (settings.profileVisibility === "public") {
-    return true;
-  }
-
-  return viewerIsFollower;
-}
-
-export function normalizeUserSettings(
-  settings: Partial<UserSettings>,
-  userId: string,
-): UserSettings {
+export function normalizeSettings(
+  settings: Partial<AppSettings>,
+): AppSettings {
   const defaults =
-    createDefaultUserSettings(userId);
+    createDefaultSettings();
 
   return {
-    ...defaults,
-    ...settings,
-    userId,
-    blockedUserIds: Array.from(
-      new Set(
-        Array.isArray(settings.blockedUserIds)
-          ? settings.blockedUserIds
-          : [],
+    theme:
+      settings.theme === "light" ||
+      settings.theme === "dark" ||
+      settings.theme === "system"
+        ? settings.theme
+        : defaults.theme,
+
+    language:
+      settings.language ??
+      defaults.language,
+
+    notifications: {
+      ...defaults.notifications,
+      ...(settings.notifications ?? {}),
+    },
+
+    privacy: {
+      ...defaults.privacy,
+      ...(settings.privacy ?? {}),
+    },
+
+    learning: {
+      ...defaults.learning,
+      ...(settings.learning ?? {}),
+      dailyGoal: Math.max(
+        1,
+        Number(
+          settings.learning?.dailyGoal ??
+            defaults.learning.dailyGoal,
+        ),
       ),
-    ),
-    updatedAt:
-      settings.updatedAt ??
-      defaults.updatedAt,
+      defaultLevel:
+        cleanString(
+          settings.learning?.defaultLevel,
+        ) ||
+        defaults.learning.defaultLevel,
+      defaultLanguage:
+        cleanString(
+          settings.learning?.defaultLanguage,
+        ) ||
+        defaults.learning.defaultLanguage,
+    },
   };
 }
+
+export function updateTheme(
+  settings: AppSettings,
+  theme: ThemeMode,
+): AppSettings {
+  return {
+    ...settings,
+    theme,
+  };
+}
+
+export function updateAppLanguage(
+  settings: AppSettings,
+  language: AppLanguage,
+): AppSettings {
+  return {
+    ...settings,
+    language,
+  };
+}
+
+export function updateNotificationSetting(
+  settings: AppSettings,
+  key: keyof NotificationSettings,
+  value: boolean,
+): AppSettings {
+  return {
+    ...settings,
+    notifications: {
+      ...settings.notifications,
+      [key]: value,
+    },
+  };
+}
+
+export function updatePrivacySetting(
+  settings: AppSettings,
+  key: keyof PrivacySettings,
+  value: boolean,
+): AppSettings {
+  return {
+    ...settings,
+    privacy: {
+      ...settings.privacy,
+      [key]: value,
+    },
+  };
+}
+
+export function updateLearningSetting(
+  settings: AppSettings,
+  changes: Partial<LearningSettings>,
+): AppSettings {
+  return {
+    ...settings,
+    learning: {
+      ...settings.learning,
+      ...changes,
+      dailyGoal: Math.max(
+        1,
+        Number(
+          changes.dailyGoal ??
+            settings.learning.dailyGoal,
+        ),
+      ),
+    },
+  };
+}
+
+export function resetSettings(): AppSettings {
+  return createDefaultSettings();
+}
+  
+
+        
+  
+  
+  
+    
+    
+  
