@@ -137,12 +137,14 @@ export function canSendMessage(
     (request) =>
       request.status === "accepted" &&
       (
-        request.senderId === senderId &&
-        request.receiverId === receiverId
-      ) ||
-      (
-        request.senderId === receiverId &&
-        request.receiverId === senderId
+        (
+          request.senderId === senderId &&
+          request.receiverId === receiverId
+        ) ||
+        (
+          request.senderId === receiverId &&
+          request.receiverId === senderId
+        )
       ),
   );
 }
@@ -207,12 +209,21 @@ export function hasAcceptedConversation(
     (request) =>
       request.status === "accepted" &&
       (
-        request.senderId === userA &&
-        request.receiverId === userB
-      ) ||
-      (
-        request.senderId === userB &&
-        request.receiverId === userA
+        (
+          request.senderId === userA &&
+          request.receiverId === userB
+        ) ||
+        (
+          request.senderId === userB &&
+          request.receiverId === userA
+        )
       ),
   );
 }
+
+
+  
+    
+
+
+  
