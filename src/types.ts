@@ -1,7 +1,3 @@
-// ======================================================
-// PAGES
-// ======================================================
-
 export type Page =
   | "welcome"
   | "auth"
@@ -133,7 +129,9 @@ export interface VocabularyWord {
   word: string;
   meaning: string;
   example: string;
+
   articleId: string;
+
   savedAt: string;
 }
 
@@ -144,9 +142,13 @@ export interface VocabularyWord {
 export interface PracticeQuestion {
   id: string;
   level: Level;
+
   question: string;
+
   options: string[];
+
   correctAnswer: string;
+
   explanation: string;
 }
 
@@ -166,15 +168,25 @@ export type LevelTestQuestionType =
 
 export interface LevelTestQuestion {
   id: string;
+
   level: Level;
+
   skill: LevelTestSkill;
+
   type: LevelTestQuestionType;
+
   question: string;
+
   passage?: string;
+
   audioSrc?: string;
+
   options?: string[];
+
   correctAnswer?: string;
+
   writingPrompt?: string;
+
   points: number;
 }
 
@@ -184,8 +196,11 @@ export interface LevelTestQuestion {
 
 export interface LevelTestAnswer {
   questionId: string;
+
   answer: string;
+
   isCorrect?: boolean;
+
   pointsEarned?: number;
 }
 
@@ -195,21 +210,31 @@ export interface LevelTestAnswer {
 
 export interface LevelTestSkillResult {
   skill: LevelTestSkill;
+
   score: number;
+
   total: number;
+
   percentage: number;
+
   level: Level;
 }
 
 export interface LevelTestResult {
   score: number;
+
   total: number;
+
   percentage: number;
+
   level: Level;
 
   reading: LevelTestSkillResult;
+
   listening: LevelTestSkillResult;
+
   writing: LevelTestSkillResult;
+
   grammar: LevelTestSkillResult;
 
   completedAt: string;
@@ -255,21 +280,29 @@ export interface LearningCard {
   id: string;
 
   title?: string;
+
   content?: string;
+
   answer?: string;
 
   word?: string;
+
   meaning?: string;
+
   example?: string;
 
   type?: LearningCardType;
 
   level: Level;
+
   topic: string;
 
   difficulty?: CardDifficulty;
 
+  // XP required to collect the card.
   xpCost: number;
+
+  // XP received after completing the card.
   xpReward?: number;
 
   createdAt?: string;
@@ -277,15 +310,16 @@ export interface LearningCard {
 
 export interface CollectedCard {
   cardId: string;
+
   collectedAt: string;
 
-  // Number of times the card was used
-  // as a learning activity.
   timesUsed?: number;
 
-  // Number of times the card was played
-  // as an interactive/game card.
   timesPlayed?: number;
+
+  // true = the 3 XP completion reward
+  // has already been claimed.
+  rewardClaimed?: boolean;
 }
 
 // ======================================================
@@ -303,9 +337,13 @@ export type RoomType =
 
 export interface RoomSettings {
   topic: string;
+
   level: Level;
+
   gender: RoomGender;
+
   type: RoomType;
+
   maxParticipants: number;
 
   allowPrivateMessages: boolean;
@@ -313,43 +351,29 @@ export interface RoomSettings {
 
 export interface LearningRoom {
   id: string;
+
   name: string;
+
   hostId: string;
+
   settings: RoomSettings;
+
   participants: string[];
+
   createdAt: string;
+
   isActive: boolean;
 }
 
-export type RoomStatus =
-  | "waiting"
-  | "active"
-  | "ended";
-
-export interface Room {
-  id: string;
-  title: string;
-  language: string;
-  level: Level;
-  topic: string;
-  type: RoomType;
-  gender: RoomGender;
-  hostId: string;
-  participantIds: string[];
-  maxParticipants: number;
-  status: RoomStatus;
-  createdAt: string;
-  startedAt?: string;
-  endedAt?: string;
-}
-
 // ======================================================
-// IDENTITY CARD / الموحدة
+// IDENTITY CARD
 // ======================================================
 
 export interface IdentityCard {
   issuedAt: string;
+
   expiresAt: string;
+
   renewalXpCost?: number;
 }
 
@@ -359,14 +383,15 @@ export interface IdentityCard {
 
 export interface UserProfile {
   name: string;
+
   email: string;
 
-  // ISO 3166-1 alpha-2 country code.
-  // Examples: IQ, US, GB, CA, JP...
   countryCode: string;
 
   level: Level;
+
   avatar: Avatar;
+
   xp: number;
 
   identityCard: IdentityCard | null;
@@ -374,74 +399,37 @@ export interface UserProfile {
   levelTestCompleted: boolean;
 
   levelTestResult?: LevelTestResult | null;
+
+  isVip?: boolean;
+
+  vipSince?: string;
+
+  vipUntil?: string;
 }
 
 // ======================================================
 // SETTINGS
 // ======================================================
 
-export type ThemeMode =
-  | "light"
-  | "dark"
-  | "system";
-
-export type AppLanguage =
-  | "ar"
-  | "en"
-  | "zh-CN"
-  | "ru"
-  | "ku"
-  | "tr"
-  | "fr"
-  | "de"
-  | "es"
-  | "it"
-  | "ja"
-  | "ko";
-
-export interface NotificationSettings {
-  pushNotifications: boolean;
-  messageNotifications: boolean;
-  followNotifications: boolean;
-  learningNotifications: boolean;
-  officialUpdates: boolean;
-}
-
-export interface PrivacySettings {
-  profileVisible: boolean;
-  showOnlineStatus: boolean;
-  allowMessageRequests: boolean;
-  allowRoomInvites: boolean;
-}
-
-export interface LearningSettings {
-  dailyGoal: number;
-  defaultLevel: string;
-  defaultLanguage: string;
-  autoplayAudio: boolean;
-}
-
 export interface AppSettings {
-  theme: ThemeMode;
-  language: AppLanguage;
+  notifications: boolean;
 
-  notifications: NotificationSettings;
-  privacy: PrivacySettings;
-  learning: LearningSettings;
+  soundEffects: boolean;
 
-  // Legacy compatibility fields.
-  notificationsEnabled?: boolean;
-  soundEffects?: boolean;
-  autoplayAudio?: boolean;
-  privateMessages?: boolean;
-  showOnlineStatus?: boolean;
+  autoplayAudio: boolean;
 
-  preferredTheme?:
+  privateMessages: boolean;
+
+  showOnlineStatus: boolean;
+
+  preferredTheme:
     | "light"
     | "system"
     | "dark";
 
-  preferredLanguage?: "en" | "ar";
+  preferredLanguage:
+    | "en"
+    | "ar";
 }
 
 // ======================================================
@@ -451,47 +439,23 @@ export interface AppSettings {
 export type UpdateType =
   | "feature"
   | "improvement"
-  | "maintenance"
-  | "announcement"
-  | "security"
-  | "education"
-  | "fix";
-
-export type UpdateStatus =
-  | "draft"
-  | "published"
-  | "archived";
+  | "fix"
+  | "announcement";
 
 export interface AppUpdate {
   id: string;
 
   title: string;
 
-  message?: string;
-
-  description?: string;
+  description: string;
 
   type: UpdateType;
 
-  status?: UpdateStatus;
+  version: string;
 
-  createdAt?: string;
-  updatedAt?: string;
-  publishedAt?: string;
+  date: string;
 
-  date?: string;
-
-  authorId?: string;
-
-  featured?: boolean;
-
-  version?: string;
-
-  actionUrl?: string;
-
-  metadata?: Record<string, string>;
-
-  isNew?: boolean;
+  isNew: boolean;
 }
 
 // ======================================================
@@ -514,26 +478,6 @@ export interface ProgressStats {
   levelTestScore: number;
 
   levelTestTotal: number;
-
-  // ----------------------------------------------------
-  // Streak
-  // ----------------------------------------------------
-
-  currentStreak?: number;
-
-  longestStreak?: number;
-
-  lastActiveDate?: string;
-
-  streakActive?: boolean;
-
-  // ----------------------------------------------------
-  // Daily progress
-  // ----------------------------------------------------
-
-  dailyXp?: number;
-
-  dailyGoal?: number;
 }
 
 // ======================================================
@@ -563,16 +507,10 @@ export interface AppState {
 
   isAuthenticated: boolean;
 
-  // ----------------------------------------------------
   // XP
-  // ----------------------------------------------------
-
   totalXp: number;
 
-  // ----------------------------------------------------
   // Progress
-  // ----------------------------------------------------
-
   articlesRead: number;
 
   vocabularyLearned: number;
@@ -583,10 +521,7 @@ export interface AppState {
 
   cardsCollected: number;
 
-  // ----------------------------------------------------
   // Level Test
-  // ----------------------------------------------------
-
   levelTestScore: number;
 
   levelTestTotal: number;
@@ -595,55 +530,27 @@ export interface AppState {
 
   levelTestResult?: LevelTestResult | null;
 
-  // ----------------------------------------------------
   // Cards
-  // ----------------------------------------------------
-
   collectedCards?: CollectedCard[];
 
-  // ----------------------------------------------------
   // Rooms
-  // ----------------------------------------------------
-
   joinedRoomId?: string | null;
 
-  // ----------------------------------------------------
   // Settings
-  // ----------------------------------------------------
-
   settings?: AppSettings;
 
-  // ----------------------------------------------------
   // Updates
-  // ----------------------------------------------------
-
   seenUpdates?: string[];
 
-  // ----------------------------------------------------
-  // Streak / Daily Progress
-  // ----------------------------------------------------
-
+  // Streak / daily progress
   progress?: {
-    currentStreak: number;
-
-    longestStreak: number;
-
-    lastActiveDate: string;
-
+    currentStreak?: number;
+    longestStreak?: number;
+    lastActiveDate?: string;
     dailyXp?: number;
-
     dailyGoal?: number;
   };
 }
-
-  
-
-  
-
-
-  
-  
-  
   
     
 
