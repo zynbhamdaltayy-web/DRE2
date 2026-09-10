@@ -248,12 +248,9 @@ export type LearningCardType =
   | "phrase"
   | "question"
   | "challenge"
-  | "roleplay";
+  | "roleplay"
+  | "mystery";
 
-/*
- * Supports the original card structure and
- * the newer card system.
- */
 export interface LearningCard {
   id: string;
 
@@ -282,14 +279,12 @@ export interface CollectedCard {
   cardId: string;
   collectedAt: string;
 
-  /*
-   * New system.
-   */
+  // Number of times the card was used
+  // as a learning activity.
   timesUsed?: number;
 
-  /*
-   * Original system compatibility.
-   */
+  // Number of times the card was played
+  // as an interactive/game card.
   timesPlayed?: number;
 }
 
@@ -313,10 +308,6 @@ export interface RoomSettings {
   type: RoomType;
   maxParticipants: number;
 
-  /*
-   * Private messaging inside rooms
-   * remains a separate safety setting.
-   */
   allowPrivateMessages: boolean;
 }
 
@@ -330,9 +321,6 @@ export interface LearningRoom {
   isActive: boolean;
 }
 
-/*
- * Room structure used by src/data/rooms.ts.
- */
 export type RoomStatus =
   | "waiting"
   | "active"
@@ -434,9 +422,6 @@ export interface LearningSettings {
 }
 
 export interface AppSettings {
-  /*
-   * New settings structure.
-   */
   theme: ThemeMode;
   language: AppLanguage;
 
@@ -444,18 +429,18 @@ export interface AppSettings {
   privacy: PrivacySettings;
   learning: LearningSettings;
 
-  /*
-   * Legacy compatibility fields.
-   */
+  // Legacy compatibility fields.
   notificationsEnabled?: boolean;
   soundEffects?: boolean;
   autoplayAudio?: boolean;
   privateMessages?: boolean;
   showOnlineStatus?: boolean;
+
   preferredTheme?:
     | "light"
     | "system"
     | "dark";
+
   preferredLanguage?: "en" | "ar";
 }
 
@@ -477,22 +462,13 @@ export type UpdateStatus =
   | "published"
   | "archived";
 
-/*
- * New update structure.
- */
 export interface AppUpdate {
   id: string;
 
   title: string;
 
-  /*
-   * New system.
-   */
   message?: string;
 
-  /*
-   * Legacy compatibility.
-   */
   description?: string;
 
   type: UpdateType;
@@ -503,9 +479,6 @@ export interface AppUpdate {
   updatedAt?: string;
   publishedAt?: string;
 
-  /*
-   * Legacy field.
-   */
   date?: string;
 
   authorId?: string;
@@ -518,9 +491,6 @@ export interface AppUpdate {
 
   metadata?: Record<string, string>;
 
-  /*
-   * Legacy UI compatibility.
-   */
   isNew?: boolean;
 }
 
@@ -665,11 +635,6 @@ export interface AppState {
     dailyGoal?: number;
   };
 }
-  
-
-
-
-  
 
   
 
@@ -678,9 +643,12 @@ export interface AppState {
 
   
   
+  
+  
+    
 
 
   
 
-  
+
   
