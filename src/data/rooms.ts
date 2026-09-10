@@ -76,6 +76,96 @@ export interface RoomJoinUser {
 const MAX_ROOM_PARTICIPANTS = 8;
 const MIN_ROOM_PARTICIPANTS = 2;
 
+/**
+ * Valid room status transitions.
+ *
+ * waiting → active
+ * waiting → ended
+ * active  → ended
+ *
+ * The same status is also allowed.
+ *
+ * Invalid transitions:
+ * active → waiting
+ * ended → waiting
+ * ended → active
+ */
+const ROOM_STATUS_TRANSITIONS: Record<
+  RoomStatus,
+  RoomStatus[]
+> = {
+  waiting: [
+    "waiting",
+    "active",
+    "ended",
+  ],
+
+  active: [
+    "active",
+    "ended",
+  ],
+
+  ended: [
+    "ended",
+  ],
+};
+
+/**
+ * Checks whether a room can move
+ * from one status to another.
+ */
+export function canTransitionRoomStatus(
+  from: RoomStatus,
+  to: RoomStatus,
+): boolean {
+  return ROOM_STATUS_TRANSITIONS[
+    from
+  ].includes(to);
+}
+
+/**
+ * Safely changes a room status.
+ *
+ * If the requested transition is invalid,
+ * the original room is returned unchanged.
+ */
+export function setRoomStatus(
+  room: Room,
+  nextStatus: RoomStatus,
+): Room {
+  if (
+    !canTransitionRoomStatus(
+      room.status,
+      nextStatus,
+    )
+  ) {
+    return room;
+  }
+
+  if (room.status === nextStatus) {
+    return room;
+  }
+
+  const now =
+    new Date().toISOString();
+
+  return {
+    ...room,
+
+    status: nextStatus,
+
+    startedAt:
+      nextStatus === "active"
+        ? room.startedAt ?? now
+        : room.startedAt,
+
+    endedAt:
+      nextStatus === "ended"
+        ? room.endedAt ?? now
+        : room.endedAt,
+  };
+}
+
 function createId(): string {
   return `room-${Date.now()}-${Math.random()
     .toString(36)
@@ -366,21 +456,31 @@ export function joinRoom(
           normalizedId,
         ];
 
-  return {
+  const roomWithParticipant = {
     ...room,
 
     participantIds:
       participants,
-
-    status:
-      participants.length > 0
-        ? "active"
-        : room.status,
-
-    startedAt:
-      room.startedAt ??
-      new Date().toISOString(),
   };
+
+  /**
+   * A room starts when its first
+   * participant joins.
+   *
+   * Normally the host is already present,
+   * so joining a newly created room changes
+   * waiting → active.
+   */
+  if (
+    room.status === "waiting"
+  ) {
+    return setRoomStatus(
+      roomWithParticipant,
+      "active",
+    );
+  }
+
+  return roomWithParticipant;
 }
 
 // ======================================================
@@ -400,22 +500,31 @@ export function leaveRoom(
         id !== normalizedId,
     );
 
-  return {
+  const updatedRoom = {
     ...room,
 
     participantIds:
       participants,
-
-    status:
-      participants.length === 0
-        ? "ended"
-        : room.status,
-
-    endedAt:
-      participants.length === 0
-        ? new Date().toISOString()
-        : room.endedAt,
   };
+
+  /**
+   * When nobody remains, the room ends.
+   *
+   * This is a valid:
+   * active → ended
+   * transition.
+   */
+  if (
+    participants.length === 0 &&
+    room.status !== "ended"
+  ) {
+    return setRoomStatus(
+      updatedRoom,
+      "ended",
+    );
+  }
+
+  return updatedRoom;
 }
 
 // ======================================================
@@ -441,18 +550,10 @@ export function endRoom(
     return room;
   }
 
-  if (room.status === "ended") {
-    return room;
-  }
-
-  return {
-    ...room,
-
-    status: "ended",
-
-    endedAt:
-      new Date().toISOString(),
-  };
+  return setRoomStatus(
+    room,
+    "ended",
+  );
 }
 
 // ======================================================
@@ -1040,11 +1141,3 @@ export function validateRoomInput(
 
   return errors;
 }
-
-
-    
-    
-    
- 
-
-  
