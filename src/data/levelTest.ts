@@ -58,22 +58,10 @@ export const levelDescriptions: Record<Level, string> = {
   C2: "Proficient",
 };
 
-/*
- * Minimum objective performance needed to demonstrate
- * a CEFR level with reasonable confidence.
- */
 export const LEVEL_MASTERY_THRESHOLD = 0.6;
 
-/*
- * Strong performance means the learner is ready to
- * move toward the next CEFR level.
- */
 export const LEVEL_ADVANCE_THRESHOLD = 0.7;
 
-/*
- * Weak performance suggests that the current level
- * may be the learner's ceiling.
- */
 export const LEVEL_STOP_THRESHOLD = 0.4;
 
 /*
@@ -920,12 +908,6 @@ export const levelTestQuestions: LevelTestQuestion[] = [
     points: 5,
   },
 
-  /*
-   * Additional C2 questions.
-   *
-   * These bring the complete question bank to exactly 50.
-   */
-
   {
     id: "c2-g-04",
     level: "C2",
@@ -969,15 +951,9 @@ export const levelTestQuestions: LevelTestQuestion[] = [
  * BANK VALIDATION
  * ========================================================= */
 
-/*
- * The final bank must contain exactly 50 questions.
- */
 export const LEVEL_TEST_QUESTION_COUNT =
   levelTestQuestions.length;
 
-/*
- * Runtime-safe validation helper.
- */
 export function validateLevelTestBank(): {
   valid: boolean;
   count: number;
@@ -1106,9 +1082,7 @@ export function isAnswerCorrect(
 
   return (
     answer.trim().toLowerCase() ===
-    question.correctAnswer
-      .trim()
-      .toLowerCase()
+    question.correctAnswer.trim().toLowerCase()
   );
 }
 
@@ -1140,9 +1114,7 @@ export function getQuestionScore(
   question: LevelTestQuestion,
   answer: string,
 ): number {
-  if (
-    question.type !== "multiple-choice"
-  ) {
+  if (question.type !== "multiple-choice") {
     return 0;
   }
 
@@ -1196,10 +1168,7 @@ export function calculateLevelScore(
     level,
     correct,
     total,
-    percentage: percentage(
-      correct,
-      total,
-    ),
+    percentage: percentage(correct, total),
   };
 }
 
@@ -1218,8 +1187,7 @@ export function calculateSkillScore(
   skill: LevelTestSkill,
   answers: Record<string, string>,
 ): SkillScore {
-  const questions =
-    getQuestionsBySkill(skill);
+  const questions = getQuestionsBySkill(skill);
 
   let correct = 0;
   let total = 0;
@@ -1249,10 +1217,7 @@ export function calculateSkillScore(
     skill,
     correct,
     total,
-    percentage: percentage(
-      correct,
-      total,
-    ),
+    percentage: percentage(correct, total),
   };
 }
 
@@ -1262,10 +1227,7 @@ export function calculateSkillScore(
 
 export function calculateAllSkillScores(
   answers: Record<string, string>,
-): Record<
-  LevelTestSkill,
-  SkillScore
-> {
+): Record<LevelTestSkill, SkillScore> {
   return {
     reading: calculateSkillScore(
       "reading",
@@ -1292,20 +1254,6 @@ export function calculateAllSkillScores(
 /* =========================================================
  * WRITING RUBRIC
  * ========================================================= */
-
-/*
- * Writing is not auto-scored by this file.
- *
- * The UI / future evaluator can provide:
- *
- * - taskAchievement
- * - grammar
- * - vocabulary
- * - organization
- * - coherence
- *
- * Each category is scored from 0–5.
- */
 
 export interface WritingRubricScore {
   taskAchievement: number;
@@ -1334,9 +1282,7 @@ export function evaluateWriting(
   rubric: WritingRubricScore,
 ): WritingEvaluation {
   const taskAchievement =
-    clampRubricScore(
-      rubric.taskAchievement,
-    );
+    clampRubricScore(rubric.taskAchievement);
 
   const grammar =
     clampRubricScore(rubric.grammar);
@@ -1345,14 +1291,10 @@ export function evaluateWriting(
     clampRubricScore(rubric.vocabulary);
 
   const organization =
-    clampRubricScore(
-      rubric.organization,
-    );
+    clampRubricScore(rubric.organization);
 
   const coherence =
-    clampRubricScore(
-      rubric.coherence,
-    );
+    clampRubricScore(rubric.coherence);
 
   const total =
     taskAchievement +
@@ -1396,21 +1338,14 @@ export function evaluateWriting(
  * ========================================================= */
 
 export function calculateProgressiveLevel(
-  levelScores: Record<
-    Level,
-    number
-  >,
+  levelScores: Record<Level, number>,
 ): Level {
   let strongestLevel: Level = "A1";
 
   for (const level of levelOrder) {
-    const score =
-      levelScores[level] ?? 0;
+    const score = levelScores[level] ?? 0;
 
-    if (
-      score >=
-      LEVEL_MASTERY_THRESHOLD
-    ) {
+    if (score >= LEVEL_MASTERY_THRESHOLD) {
       strongestLevel = level;
     } else {
       break;
@@ -1430,22 +1365,17 @@ export function estimateLevelFromAnswers(
   let strongestLevel: Level = "A1";
 
   for (const level of levelOrder) {
-    const score =
-      calculateLevelScore(
-        level,
-        answers,
-      );
+    const score = calculateLevelScore(
+      level,
+      answers,
+    );
 
-    /*
-     * Do not judge an untouched level.
-     */
     if (score.total === 0) {
       break;
     }
 
     const ratio =
-      score.correct /
-      score.total;
+      score.correct / score.total;
 
     if (
       ratio >=
@@ -1516,17 +1446,15 @@ export function getRecentAccuracy(
   state: AdaptiveState,
   size = ADAPTIVE_WINDOW_SIZE,
 ): number {
-  const recent =
-    getRecentAnswers(state, size);
+  const recent = getRecentAnswers(state, size);
 
   if (recent.length === 0) {
     return 0;
   }
 
-  const correct =
-    recent.filter(
-      (item) => item.correct,
-    ).length;
+  const correct = recent.filter(
+    (item) => item.correct,
+  ).length;
 
   return correct / recent.length;
 }
@@ -1541,66 +1469,122 @@ export function recordAdaptiveAnswer(
   answer: string,
 ): AdaptiveState {
   const correct =
-    isAnswerCorrect(
-      question,
-      answer,
-    );
+    isAnswerCorrect(question, answer);
 
+  /*
+   * Every answered question is stored so the test
+   * can count progress toward the 50-question limit.
+   *
+   * Writing answers are intentionally NOT added
+   * to adaptive history because they are open-ended
+   * and cannot be judged automatically.
+   */
   const nextState: AdaptiveState = {
     ...state,
+
     answeredQuestionIds: [
       ...state.answeredQuestionIds,
       question.id,
     ],
+
     answers: {
       ...state.answers,
       [question.id]: answer,
     },
-    history: [
-      ...state.history,
-      {
-        questionId: question.id,
-        level: question.level,
-        skill: question.skill,
-        correct,
-      },
-    ],
+
+    history:
+      question.type === "multiple-choice"
+        ? [
+            ...state.history,
+            {
+              questionId: question.id,
+              level: question.level,
+              skill: question.skill,
+              correct,
+            },
+          ]
+        : [...state.history],
+
+    consecutiveCorrect:
+      state.consecutiveCorrect,
+
+    consecutiveIncorrect:
+      state.consecutiveIncorrect,
+
+    highestDemonstratedLevel:
+      state.highestDemonstratedLevel,
+
+    lowestWeakLevel:
+      state.lowestWeakLevel,
   };
 
-  if (correct) {
-    nextState.consecutiveCorrect =
-      state.consecutiveCorrect + 1;
+  /*
+   * Only automatically scored multiple-choice
+   * questions affect adaptive streaks.
+   */
+  if (question.type === "multiple-choice") {
+    if (correct) {
+      nextState.consecutiveCorrect =
+        state.consecutiveCorrect + 1;
 
-    nextState.consecutiveIncorrect = 0;
-  } else {
-    nextState.consecutiveIncorrect =
-      state.consecutiveIncorrect + 1;
+      nextState.consecutiveIncorrect = 0;
+    } else {
+      nextState.consecutiveIncorrect =
+        state.consecutiveIncorrect + 1;
 
-    nextState.consecutiveCorrect = 0;
+      nextState.consecutiveCorrect = 0;
+    }
   }
 
-  const levelScore =
-    calculateLevelScore(
-      question.level,
-      nextState.answers,
-    );
+  /*
+   * Update demonstrated level using objective
+   * questions only.
+   */
+  if (question.type === "multiple-choice") {
+    const levelScore =
+      calculateLevelScore(
+        question.level,
+        nextState.answers,
+      );
 
-  if (
-    levelScore.total > 0 &&
-    levelScore.percentage >=
-      LEVEL_MASTERY_THRESHOLD * 100
-  ) {
-    nextState.highestDemonstratedLevel =
-      question.level;
-  }
+    if (
+      levelScore.total > 0 &&
+      levelScore.percentage >=
+        LEVEL_MASTERY_THRESHOLD * 100
+    ) {
+      const currentHighestIndex =
+        getLevelIndex(
+          nextState.highestDemonstratedLevel,
+        );
 
-  if (
-    levelScore.total >= 2 &&
-    levelScore.percentage <
-      LEVEL_STOP_THRESHOLD * 100
-  ) {
-    nextState.lowestWeakLevel =
-      question.level;
+      const questionLevelIndex =
+        getLevelIndex(question.level);
+
+      if (
+        questionLevelIndex >
+        currentHighestIndex
+      ) {
+        nextState.highestDemonstratedLevel =
+          question.level;
+      }
+    }
+
+    if (
+      levelScore.total >= 2 &&
+      levelScore.percentage <
+        LEVEL_STOP_THRESHOLD * 100
+    ) {
+      if (
+        nextState.lowestWeakLevel === null ||
+        getLevelIndex(question.level) <
+          getLevelIndex(
+            nextState.lowestWeakLevel,
+          )
+      ) {
+        nextState.lowestWeakLevel =
+          question.level;
+      }
+    }
   }
 
   nextState.currentLevel =
@@ -1627,12 +1611,12 @@ export function determineNextAdaptiveLevel(
     state.currentLevel;
 
   /*
-   * Four consecutive correct answers indicate
+   * FOUR consecutive correct answers indicate
    * strong evidence that the learner can attempt
    * the next CEFR level.
    */
   if (
-    state.consecutiveCorrect >= 3
+    state.consecutiveCorrect >= 4
   ) {
     return (
       getNextLevel(current) ??
@@ -1641,18 +1625,18 @@ export function determineNextAdaptiveLevel(
   }
 
   /*
-   * Four consecutive incorrect answers indicate
+   * FOUR consecutive incorrect answers indicate
    * that moving upward is probably premature.
    */
   if (
-    state.consecutiveIncorrect >= 3
+    state.consecutiveIncorrect >= 4
   ) {
     return current;
   }
 
   /*
-   * Recent performance can also move the learner
-   * upward when there is a strong pattern.
+   * Recent objective performance can also move
+   * the learner upward when there is a strong pattern.
    */
   const recentAccuracy =
     getRecentAccuracy(state);
@@ -1681,10 +1665,6 @@ export function shouldFinishTest(
   const answered =
     state.answeredQuestionIds.length;
 
-  /*
-   * Never finish before the minimum number
-   * of questions.
-   */
   if (
     answered <
     MIN_LEVEL_TEST_QUESTIONS
@@ -1692,9 +1672,6 @@ export function shouldFinishTest(
     return false;
   }
 
-  /*
-   * Always stop at 50.
-   */
   if (
     answered >=
     MAX_LEVEL_TEST_QUESTIONS
@@ -1702,27 +1679,11 @@ export function shouldFinishTest(
     return true;
   }
 
-  /*
-   * Early finish:
-   *
-   * If the learner has demonstrated a level
-   * and then repeatedly performs strongly,
-   * the engine can finish without forcing
-   * unnecessary questions.
-   */
   if (
     answered >=
       EARLY_FINISH_MIN_QUESTIONS &&
     state.consecutiveCorrect >= 4
   ) {
-    const next =
-      getNextLevel(
-        state.highestDemonstratedLevel,
-      );
-
-    /*
-     * C2 is already the highest level.
-     */
     if (
       state.highestDemonstratedLevel ===
       "C2"
@@ -1730,11 +1691,11 @@ export function shouldFinishTest(
       return true;
     }
 
-    /*
-     * If the current level is already high
-     * and the learner is consistently strong,
-     * confidence is sufficient.
-     */
+    const next =
+      getNextLevel(
+        state.highestDemonstratedLevel,
+      );
+
     if (
       next === null ||
       getLevelIndex(
@@ -1766,9 +1727,6 @@ export function getNextAdaptiveQuestion(
     return null;
   }
 
-  /*
-   * First try the current adaptive level.
-   */
   const currentLevelQuestions =
     getQuestionsByLevel(
       state.currentLevel,
@@ -1788,10 +1746,6 @@ export function getNextAdaptiveQuestion(
     );
   }
 
-  /*
-   * If the current level has no unused
-   * questions, try the next level.
-   */
   const nextLevel =
     getNextLevel(
       state.currentLevel,
@@ -1816,10 +1770,6 @@ export function getNextAdaptiveQuestion(
     }
   }
 
-  /*
-   * Final fallback:
-   * find any unused question.
-   */
   const remaining =
     levelTestQuestions.filter(
       (question) =>
@@ -1846,10 +1796,6 @@ export function selectBalancedQuestion(
   questions: LevelTestQuestion[],
   state: AdaptiveState,
 ): LevelTestQuestion {
-  /*
-   * Count recent skills so we can avoid asking
-   * too many questions from the same skill.
-   */
   const recentSkills =
     getRecentAnswers(
       state,
@@ -1871,9 +1817,6 @@ export function selectBalancedQuestion(
     );
   }
 
-  /*
-   * Prefer skills that have appeared less recently.
-   */
   const sorted = [...questions].sort(
     (a, b) => {
       const aCount =
@@ -1974,11 +1917,6 @@ export function calculateLevelTestResult(
       state.answers,
     );
 
-  /*
-   * Writing questions are open-ended, so the
-   * objective score for writing remains zero
-   * until an evaluation is supplied.
-   */
   if (writingEvaluation) {
     skillScores.writing = {
       skill: "writing",
@@ -2011,7 +1949,8 @@ export function calculateLevelTestResult(
   };
 
   /*
-   * Calculate objective overall performance.
+   * history contains only automatically scored
+   * multiple-choice questions.
    */
   const objectiveQuestions =
     state.history.filter(
@@ -2040,10 +1979,6 @@ export function calculateLevelTestResult(
       objectiveQuestions.length,
     );
 
-  /*
-   * Writing contributes to the final result
-   * when it has been evaluated.
-   */
   const finalPercentage =
     writingEvaluation
       ? Math.round(
@@ -2058,13 +1993,6 @@ export function calculateLevelTestResult(
       finalPercentage,
     );
 
-  /*
-   * Progressive evidence is stronger than
-   * raw percentage alone.
-   *
-   * Do not award a high CEFR level merely because
-   * the learner answered lower-level questions well.
-   */
   const demonstratedLevel =
     state.highestDemonstratedLevel;
 
@@ -2129,12 +2057,6 @@ export function calculateProgressiveLevelFromScores(
     ) {
       strongestLevel = level;
     } else {
-      /*
-       * CEFR levels are progressive.
-       * If a learner does not demonstrate
-       * B1, we should not automatically award
-       * B2 or C1 based on isolated answers.
-       */
       break;
     }
   }
@@ -2275,3 +2197,54 @@ if (
     bankValidation,
   );
 }
+     
+
+  
+      
+  
+  
+      
+      
+    
+   
+      
+    
+  
+
+  
+    
+
+  
+  
+  
+
+
+
+
+
+
+    
+
+    
+  
+      
+      
+  
+
+   
+  
+  
+      
+
+
+    
+
+  
+  
+    
+  
+      
+    
+    
+
+      
