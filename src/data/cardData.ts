@@ -4,10 +4,11 @@ import type {
   Level,
 } from "../types";
 
-import type { LearningCard } from "./cards";
-
-const CARD_XP_COST = 1;
-const CARD_XP_REWARD = 3;
+import {
+  CARD_XP_COST,
+  CARD_XP_REWARD,
+  type LearningCard,
+} from "./cards";
 
 // ======================================================
 // ORIGINAL 36 CARDS
