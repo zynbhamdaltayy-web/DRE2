@@ -346,17 +346,57 @@ export interface UserProfile {
 // SETTINGS
 // ======================================================
 
-export type AppTheme =
+export type AppLanguage =
+  | "ar"
+  | "en"
+  | "zh-CN"
+  | "ru"
+  | "ku"
+  | "tr"
+  | "fr"
+  | "de"
+  | "es"
+  | "it"
+  | "ja"
+  | "ko";
+
+export type ThemeMode =
   | "light"
   | "system"
   | "dark";
 
-export type AppLanguage =
-  | "en"
-  | "ar";
+export interface NotificationSettings {
+  pushNotifications: boolean;
+  messageNotifications: boolean;
+  followNotifications: boolean;
+  learningNotifications: boolean;
+  officialUpdates: boolean;
+}
+
+export interface PrivacySettings {
+  profileVisible: boolean;
+  showOnlineStatus: boolean;
+  allowMessageRequests: boolean;
+  allowRoomInvites: boolean;
+}
+
+export interface LearningSettings {
+  dailyGoal: number;
+  defaultLevel: Level;
+  defaultLanguage: string;
+  autoplayAudio: boolean;
+}
 
 export interface AppSettings {
-  notifications: boolean;
+  theme: ThemeMode;
+
+  language: AppLanguage;
+
+  notifications: NotificationSettings;
+
+  privacy: PrivacySettings;
+
+  learning: LearningSettings;
 
   soundEffects: boolean;
 
@@ -366,11 +406,10 @@ export interface AppSettings {
 
   showOnlineStatus: boolean;
 
-  preferredTheme: AppTheme;
+  preferredTheme: ThemeMode;
 
   preferredLanguage: AppLanguage;
 
-  // Learning preferences
   defaultLanguage: string;
 }
 
@@ -400,13 +439,40 @@ export interface AppUpdate {
 
 export interface ProgressStats {
   articlesRead: number;
+
   vocabularyLearned: number;
+
   practiceCompleted: number;
+
   roomsJoined: number;
+
   cardsCollected: number;
+
   totalXp: number;
+
+  level: Level;
+
+  levelTestCompleted: boolean;
+
   levelTestScore: number;
+
   levelTestTotal: number;
+
+  levelTestPercentage: number;
+
+  overallProgress: number;
+
+  dailyGoal: number;
+
+  dailyGoalProgress: number;
+
+  dailyGoalCompleted: boolean;
+
+  currentStreak: number;
+
+  longestStreak: number;
+
+  lastActiveDate: string;
 }
 
 // ======================================================
@@ -474,9 +540,13 @@ export interface AppState {
   // Streak / daily progress
   progress?: {
     currentStreak?: number;
+
     longestStreak?: number;
+
     lastActiveDate?: string;
+
     dailyXp?: number;
+
     dailyGoal?: number;
   };
 }
